@@ -1,0 +1,19 @@
+{
+  "name": "wedding-gallery",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "init": "bash scripts/init-resources.sh",
+    "dev:viewer": "cd workers/viewer && npx wrangler dev",
+    "dev:album": "cd workers/album && npx wrangler dev",
+    "deploy:viewer": "cd workers/viewer && npx wrangler deploy",
+    "deploy:album": "cd workers/album && npx wrangler deploy",
+    "deploy:all": "npm run deploy:viewer && npm run deploy:album"
+  },
+  "workspaces": [
+    "workers/*"
+  ],
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

@@ -1,0 +1,14 @@
+name = "album"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# R2 bucket binding (same bucket as gallery)
+[[r2_buckets]]
+binding = "PHOTOS_BUCKET"
+bucket_name = "wedding-photos"
+preview_bucket_name = "wedding-photos"
+
+# Development settings
+[dev]
+port = 8788
+local_protocol = "http"

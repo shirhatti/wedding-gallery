@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jessica and Sourabh</title>
+
+    <!-- Open Graph / Social Media Meta Tags -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Jessica and Sourabh">
+    <meta property="og:description" content="Upload your photos from the celebration">
+    <meta property="og:image" content="https://assets.shirhatti.com/weddinglogo.svg">
+    <meta property="og:url" content="https://album.shirhatti.workers.dev">
+    <meta property="og:site_name" content="Wedding Photo Album">
+
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Jessica and Sourabh">
+    <meta name="twitter:description" content="Upload your photos from the celebration">
+    <meta name="twitter:image" content="https://assets.shirhatti.com/weddinglogo.svg">
+
+    <!-- Additional Meta Tags -->
+    <meta name="description" content="Upload your photos from the celebration">>
+    <meta name="theme-color" content="#26473e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Wedding Photos">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="https://assets.shirhatti.com/weddinglogo.svg">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #26473e 0%, #1a332c 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        .header { text-align: center; margin-bottom: 40px; }
+        .wedding-logo { width: 120px; height: 120px; margin: 0 auto 20px; }
+        .wedding-logo svg { width: 100%; height: 100%; }
+        .header h1 { color: #333; font-size: 2em; margin-bottom: 10px; }
+        .header p { color: #666; font-size: 1.1em; line-height: 1.5; }
+
+        .upload-area {
+            border: 3px dashed #26473e;
+            border-radius: 15px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover { border-color: #1a332c; background: #f8faf9; }
+        .upload-area.dragover { border-color: #1a332c; background: #f0f5f3; }
+
+        .upload-icon { font-size: 3em; margin-bottom: 15px; }
+        .upload-text { font-size: 1.2em; color: #333; margin-bottom: 10px; }
+        .upload-subtext { color: #666; }
+
+        #fileInput { display: none; }
+
+        .photo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        .photo-item {
+            position: relative;
+            aspect-ratio: 1;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .photo-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .upload-status {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 8px;
+            border-radius: 15px;
+            font-size: 0.8em;
+        }
+
+        .success { background: #26473e !important; }
+        .error { background: #dc3545 !important; }
+
+        .interstitial {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(38, 71, 62, 0.95);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .interstitial.show {
+            display: flex;
+        }
+
+        .interstitial-content {
+            background: white;
+            border-radius: 20px;
+            padding: 40px 30px;
+            text-align: center;
+            max-width: 400px;
+            margin: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            animation: slideUp 0.4s ease;
+        }
+
+        .interstitial h2 {
+            color: #26473e;
+            font-size: 1.8em;
+            margin-bottom: 15px;
+        }
+
+        .interstitial p {
+            color: #666;
+            font-size: 1.1em;
+            line-height: 1.5;
+            margin-bottom: 25px;
+        }
+
+        .continue-btn {
+            background: #26473e;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        .continue-btn:hover {
+            background: #1a332c;
+            transform: translateY(-2px);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            color: #888;
+            font-size: 0.9em;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+
+        .footer p {
+            margin: 5px 0;
+        }
+
+        @media (max-width: 640px) {
+            body { padding: 10px; }
+            .container { padding: 20px; }
+            .header h1 { font-size: 1.5em; }
+            .upload-area { padding: 30px 15px; }
+            .wedding-logo { width: 100px; height: 100px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="wedding-logo">
+                <img src="https://assets.shirhatti.com/weddinglogo.svg" alt="Wedding Logo" style="width: 100%; height: 100%; object-fit: contain;" />
+            </div>
+            <h1>Upload your photos from the celebration</h1>
+        </div>
+
+        <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+            <div class="upload-icon">📸</div>
+            <div class="upload-text">Tap to add photos or videos</div>
+            <input type="file" id="fileInput" multiple accept="image/*,video/*">
+        </div>
+
+        <div id="photoGrid" class="photo-grid"></div>
+
+        <div class="footer">
+            <p>Thank you for sharing these precious memories!</p>
+            <p>❤️ Jessica and Sourabh</p>
+        </div>
+    </div>
+
+    <!-- Interstitial Modal -->
+    <div id="interstitial" class="interstitial">
+        <div class="interstitial-content">
+            <h2>✨ Thank you for adding to our memories!</h2>
+            <p>Your photos have been safely uploaded and will be treasured forever.</p>
+            <button class="continue-btn" onclick="closeInterstitial()">Add More Photos</button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * Wedding Photo Upload JavaScript
+         * Handles file selection, drag & drop, and uploads
+         */
+
+        const fileInput = document.getElementById('fileInput');
+        const uploadArea = document.querySelector('.upload-area');
+        const photoGrid = document.getElementById('photoGrid');
+
+        // Initialize upload handlers when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeUploader();
+            console.log('🎉 Wedding Photo Uploader Ready!');
+            console.log('📸 Guests can now share their photos from your special day!');
+        });
+
+        function initializeUploader() {
+            // Handle file selection
+            fileInput.addEventListener('change', handleFiles);
+
+            // Handle drag and drop events
+            uploadArea.addEventListener('dragover', handleDragOver);
+            uploadArea.addEventListener('dragleave', handleDragLeave);
+            uploadArea.addEventListener('drop', handleDrop);
+
+            // Prevent default drag behaviors on the document
+            document.addEventListener('dragover', (e) => e.preventDefault());
+            document.addEventListener('drop', (e) => e.preventDefault());
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            uploadArea.classList.remove('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            handleFiles({ target: { files: e.dataTransfer.files } });
+        }
+
+        async function handleFiles(event) {
+            const files = Array.from(event.target.files);
+
+            console.log(`📁 Processing ${files.length} file(s)`);
+
+            // Reset successful upload counter
+            window.successfulUploads = 0;
+
+            for (const file of files) {
+                if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
+                    await uploadPhoto(file);
+                } else {
+                    console.warn(`⚠️ Skipping unsupported file: ${file.name}`);
+                }
+            }
+
+            // Show interstitial if any uploads were successful
+            if (window.successfulUploads > 0) {
+                setTimeout(() => {
+                    showInterstitial();
+                }, 1000); // Wait a moment for upload animations to complete
+            }
+
+            // Reset input to allow same file selection again
+            fileInput.value = '';
+        }
+
+        async function uploadPhoto(file) {
+            console.log(`📤 Uploading: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+
+            // Create photo preview immediately
+            const photoItem = createPhotoPreview(file);
+            photoGrid.appendChild(photoItem);
+
+            // Prepare upload data
+            const formData = new FormData();
+            formData.append('files[]', file);
+
+            try {
+                // Upload to server
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    updateStatus(photoItem, 'success', '✅');
+                    console.log(`✅ Upload successful: ${result.fileName}`);
+
+                    // Track successful uploads
+                    window.successfulUploads = (window.successfulUploads || 0) + 1;
+                } else {
+                    updateStatus(photoItem, 'error', '❌');
+                    console.error(`❌ Upload failed for ${file.name}:`, result);
+                }
+
+            } catch (error) {
+                updateStatus(photoItem, 'error', '❌');
+                console.error(`❌ Upload error for ${file.name}:`, error);
+            }
+        }
+
+        function createPhotoPreview(file) {
+            const photoItem = document.createElement('div');
+            photoItem.className = 'photo-item';
+
+            // Create appropriate media element based on file type
+            if (file.type.startsWith('video/')) {
+                const video = document.createElement('video');
+                video.src = URL.createObjectURL(file);
+                video.alt = `Preview of ${file.name}`;
+                video.muted = true;
+                video.playsInline = true;
+                video.style.width = '100%';
+                video.style.height = '100%';
+                video.style.objectFit = 'cover';
+
+                // Clean up object URL when video loads
+                video.onloadeddata = () => URL.revokeObjectURL(video.src);
+
+                photoItem.appendChild(video);
+            } else {
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                img.alt = `Preview of ${file.name}`;
+
+                // Clean up object URL when image loads to prevent memory leaks
+                img.onload = () => URL.revokeObjectURL(img.src);
+
+                photoItem.appendChild(img);
+            }
+
+            // Create status indicator
+            const status = document.createElement('div');
+            status.className = 'upload-status';
+            status.textContent = '⏳';
+            status.setAttribute('aria-label', 'Upload in progress');
+
+            photoItem.appendChild(status);
+
+            return photoItem;
+        }
+
+        function updateStatus(photoItem, className, emoji) {
+            const status = photoItem.querySelector('.upload-status');
+            status.className = `upload-status ${className}`;
+            status.textContent = emoji;
+
+            // Update accessibility label
+            const statusText = className === 'success' ? 'Upload successful' : 'Upload failed';
+            status.setAttribute('aria-label', statusText);
+
+            // Add subtle animation feedback
+            status.style.transform = 'scale(1.2)';
+            status.style.transition = 'transform 0.3s ease';
+
+            setTimeout(() => {
+                status.style.transform = 'scale(1)';
+            }, 300);
+        }
+
+        // Utility function to format file sizes (for debugging)
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Interstitial modal functions
+        function showInterstitial() {
+            const interstitial = document.getElementById('interstitial');
+            interstitial.classList.add('show');
+        }
+
+        function closeInterstitial() {
+            const interstitial = document.getElementById('interstitial');
+            interstitial.classList.remove('show');
+
+            // Clear the photo grid to reset the experience
+            photoGrid.innerHTML = '';
+        }
+    </script>
+</body>
+</html>
