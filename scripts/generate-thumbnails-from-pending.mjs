@@ -41,7 +41,8 @@ async function main() {
     console.log('Fetching pending thumbnails from D1...');
     const result = execSync('npx wrangler d1 execute wedding-photos-metadata --command "SELECT key FROM pending_thumbnails ORDER BY created_at" --json --remote', {
       cwd: 'workers/viewer',
-      encoding: 'utf8'
+      encoding: 'utf8',
+      stdio: ['inherit', 'pipe', 'inherit']
     });
 
     const data = JSON.parse(result);
@@ -117,7 +118,7 @@ async function main() {
           writeFileSync('/tmp/exif-update.sql', updateSql);
           execSync('npx wrangler d1 execute wedding-photos-metadata --file=/tmp/exif-update.sql --remote', {
             cwd: 'workers/viewer',
-            stdio: 'pipe'
+            stdio: 'inherit'
           });
         }
 
@@ -154,7 +155,7 @@ async function main() {
       writeFileSync('/tmp/cleanup.sql', deleteSql);
       execSync('npx wrangler d1 execute wedding-photos-metadata --file=/tmp/cleanup.sql --remote', {
         cwd: 'workers/viewer',
-        stdio: 'pipe'
+        stdio: 'inherit'
       });
       console.log('  ✓ Cleaned up pending table');
     }
@@ -162,9 +163,21 @@ async function main() {
     console.log(`\nDone!`);
     console.log(`Generated: ${generated}`);
     console.log(`Failed: ${failed}`);
+  } catch (error) {
+    console.error('\n❌ Fatal error:', error.message);
+    if (error.stderr) {
+      console.error('STDERR:', error.stderr);
+    }
+    if (error.stdout) {
+      console.error('STDOUT:', error.stdout);
+    }
+    throw error;
   } finally {
     await worker.stop();
   }
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error('\n❌ Script failed:', error);
+  process.exit(1);
+});
