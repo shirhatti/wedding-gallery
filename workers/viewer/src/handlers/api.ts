@@ -7,27 +7,27 @@ export async function handleListMedia(env, corsHeaders) {
       .filter(obj => {
         const key = obj.key.toLowerCase();
         // Image formats
-        const isImage = key.endsWith('.jpg') || key.endsWith('.jpeg') || 
-                       key.endsWith('.png') || key.endsWith('.gif') || 
-                       key.endsWith('.webp') || key.endsWith('.svg');
+        const isImage = key.endsWith(".jpg") || key.endsWith(".jpeg") || 
+                       key.endsWith(".png") || key.endsWith(".gif") || 
+                       key.endsWith(".webp") || key.endsWith(".svg");
         // Video formats
-        const isVideo = key.endsWith('.mp4') || key.endsWith('.webm') || 
-                       key.endsWith('.mov') || key.endsWith('.avi') ||
-                       key.endsWith('.mkv') || key.endsWith('.m4v');
+        const isVideo = key.endsWith(".mp4") || key.endsWith(".webm") || 
+                       key.endsWith(".mov") || key.endsWith(".avi") ||
+                       key.endsWith(".mkv") || key.endsWith(".m4v");
         
         return isImage || isVideo;
       })
       .map(obj => {
         const key = obj.key.toLowerCase();
-        const isVideo = key.endsWith('.mp4') || key.endsWith('.webm') || 
-                       key.endsWith('.mov') || key.endsWith('.avi') ||
-                       key.endsWith('.mkv') || key.endsWith('.m4v');
+        const isVideo = key.endsWith(".mp4") || key.endsWith(".webm") || 
+                       key.endsWith(".mov") || key.endsWith(".avi") ||
+                       key.endsWith(".mkv") || key.endsWith(".m4v");
         
         return {
           key: obj.key,
-          name: obj.key.split('/').pop(),
+          name: obj.key.split("/").pop(),
           size: obj.size,
-          type: isVideo ? 'video' : 'image',
+          type: isVideo ? "video" : "image",
           uploaded: obj.uploaded,
         };
       })
@@ -35,15 +35,15 @@ export async function handleListMedia(env, corsHeaders) {
 
     return new Response(JSON.stringify({ media }), {
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         ...corsHeaders
       },
     });
-  } catch (error) {
-    return new Response(JSON.stringify({ error: 'Failed to list media' }), {
+  } catch (_error) {
+    return new Response(JSON.stringify({ error: "Failed to list media" }), {
       status: 500,
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         ...corsHeaders
       },
     });

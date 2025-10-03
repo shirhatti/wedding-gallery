@@ -2,35 +2,38 @@
 
 interface Env {
   R2_BUCKET: R2Bucket;
+  DB: D1Database;
 }
 
 export default {
-    async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    async fetch(request: Request, env: Env): Promise<Response> {
       const url = new URL(request.url);
 
       // CORS headers
       const corsHeaders = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Range',
-        'Accept-Ranges': 'bytes',
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Range",
+        "Accept-Ranges": "bytes",
       };
 
       // Handle CORS preflight
-      if (request.method === 'OPTIONS') {
+      if (request.method === "OPTIONS") {
         return new Response(null, { headers: corsHeaders });
       }
 
       // Route handling
-      if (url.pathname === '/') {
+      if (url.pathname === "/") {
         return handleHomePage();
-      } else if (url.pathname === '/api/media') {
+      } else if (url.pathname === "/api/media") {
         return handleListMedia(env, corsHeaders);
-      } else if (url.pathname.startsWith('/api/file/')) {
+      } else if (url.pathname.startsWith("/api/file/")) {
         return handleGetFile(url, env, corsHeaders, request);
+      } else if (url.pathname.startsWith("/api/thumbnail/")) {
+        return handleGetThumbnail(url, env, corsHeaders, request);
       }
 
-      return new Response('Not Found', { status: 404 });
+      return new Response("Not Found", { status: 404 });
     },
   };
 
@@ -451,7 +454,7 @@ export default {
 
                   if (isVideo) {
                       return '<div class="gallery-item" data-index="' + dataIndex + '" ' + onclickAttr + '>' +
-                          '<video class="media-lazy" data-src="/api/file/' + item.key + '" muted playsinline ' +
+                          '<video class="media-lazy" data-src="/api/thumbnail/' + item.key + '" muted playsinline ' +
                           (isMobile ? 'controls' : '') + ' preload="metadata"></video>' +
                           (!isMobile ? '<div class="play-overlay"></div>' : '') +
                           '<div class="video-indicator">📹 Video</div>' +
@@ -459,7 +462,7 @@ export default {
                           '</div>';
                   } else {
                       return '<div class="gallery-item" data-index="' + dataIndex + '" ' + onclickAttr + '>' +
-                          '<img class="media-lazy" data-src="/api/file/' + item.key + '" alt="' + item.name + '" loading="lazy">' +
+                          '<img class="media-lazy" data-src="/api/thumbnail/' + item.key + '" alt="' + item.name + '" loading="lazy">' +
                           (isMobile ? '<div class="like-heart">❤️</div>' : '') +
                           '</div>';
                   }
@@ -652,56 +655,56 @@ export default {
   </html>`;
 
     return new Response(html, {
-      headers: { 'Content-Type': 'text/html' },
+      headers: { "Content-Type": "text/html" },
     });
   }
 
-  // List all media files from R2 bucket
+  // List all media files from D1 database
   async function handleListMedia(env: Env, corsHeaders: Record<string, string>): Promise<Response> {
     try {
-      const list = await env.R2_BUCKET.list({ limit: 1000 });
+      const result = await env.DB.prepare(`
+        SELECT key, filename, type, size, uploaded_at, date_taken, camera_make, camera_model
+        FROM media
+        ORDER BY COALESCE(date_taken, uploaded_at) DESC
+        LIMIT 1000
+      `).all();
 
-      const media = list.objects
-        .filter(obj => {
-          const key = obj.key.toLowerCase();
-          // Image formats
-          const isImage = key.endsWith('.jpg') || key.endsWith('.jpeg') ||
-                         key.endsWith('.png') || key.endsWith('.gif') ||
-                         key.endsWith('.webp') || key.endsWith('.svg');
-          // Video formats
-          const isVideo = key.endsWith('.mp4') || key.endsWith('.webm') ||
-                         key.endsWith('.mov') || key.endsWith('.avi') ||
-                         key.endsWith('.mkv') || key.endsWith('.m4v');
+      interface MediaRow {
+        key: string;
+        filename: string;
+        type: string;
+        size: number;
+        uploaded_at: string;
+        date_taken: string | null;
+        camera_make: string | null;
+        camera_model: string | null;
+      }
 
-          return isImage || isVideo;
-        })
-        .map(obj => {
-          const key = obj.key.toLowerCase();
-          const isVideo = key.endsWith('.mp4') || key.endsWith('.webm') ||
-                         key.endsWith('.mov') || key.endsWith('.avi') ||
-                         key.endsWith('.mkv') || key.endsWith('.m4v');
-
-          return {
-            key: obj.key,
-            name: obj.key.split('/').pop(),
-            size: obj.size,
-            type: isVideo ? 'video' : 'image',
-            uploaded: obj.uploaded,
-          };
-        })
-        .sort((a, b) => b.uploaded - a.uploaded); // Sort by newest first
+      const media = result.results.map((row) => {
+        const r = row as MediaRow;
+        return {
+          key: r.key,
+          name: r.filename,
+          size: r.size,
+          type: r.type,
+          uploaded: r.uploaded_at,
+          dateTaken: r.date_taken,
+          cameraMake: r.camera_make,
+          cameraModel: r.camera_model,
+        };
+      });
 
       return new Response(JSON.stringify({ media }), {
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           ...corsHeaders
         },
       });
-    } catch (error) {
-      return new Response(JSON.stringify({ error: 'Failed to list media' }), {
+    } catch (_error) {
+      return new Response(JSON.stringify({ error: "Failed to list media" }), {
         status: 500,
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           ...corsHeaders
         },
       });
@@ -710,31 +713,30 @@ export default {
 
   // Get a specific file from R2 (with range support for videos)
   async function handleGetFile(url: URL, env: Env, corsHeaders: Record<string, string>, request: Request): Promise<Response> {
-    const key = decodeURIComponent(url.pathname.replace('/api/file/', ''));
+    const key = decodeURIComponent(url.pathname.replace("/api/file/", ""));
 
     try {
-      // Check if this is a range request (for video streaming)
-      const range = request.headers.get('range');
+      const range = request.headers.get("range");
 
       if (range) {
         // Handle range request for video streaming
         const object = await env.R2_BUCKET.get(key);
 
         if (!object) {
-          return new Response('File not found', { status: 404 });
+          return new Response("File not found", { status: 404 });
         }
 
         const bytes = await object.arrayBuffer();
-        const start = Number(range.replace(/bytes=/, '').split('-')[0]);
+        const start = Number(range.replace(/bytes=/, "").split("-")[0]);
         const end = bytes.byteLength - 1;
         const contentLength = end - start + 1;
 
         const headers = new Headers();
         object.writeHttpMetadata(headers);
-        headers.set('Content-Range', 'bytes ' + start + '-' + end + '/' + bytes.byteLength);
-        headers.set('Accept-Ranges', 'bytes');
-        headers.set('Content-Length', contentLength);
-        headers.set('Content-Type', object.httpMetadata?.contentType || 'video/mp4');
+        headers.set("Content-Range", "bytes " + start + "-" + end + "/" + bytes.byteLength);
+        headers.set("Accept-Ranges", "bytes");
+        headers.set("Content-Length", String(contentLength));
+        headers.set("Content-Type", object.httpMetadata?.contentType || "video/mp4");
         Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
 
         const slicedBytes = bytes.slice(start, end + 1);
@@ -748,20 +750,57 @@ export default {
         const object = await env.R2_BUCKET.get(key);
 
         if (!object) {
-          return new Response('File not found', { status: 404 });
+          return new Response("File not found", { status: 404 });
         }
 
         const headers = new Headers();
         object.writeHttpMetadata(headers);
-        headers.set('etag', object.httpEtag);
-        headers.set('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
-        headers.set('Accept-Ranges', 'bytes'); // Enable range requests
+        headers.set("etag", object.httpEtag);
+        headers.set("Cache-Control", "public, max-age=86400");
+        headers.set("Accept-Ranges", "bytes");
         Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
 
         return new Response(object.body, { headers });
       }
-    } catch (error) {
-      return new Response('Failed to retrieve file', {
+    } catch (_error) {
+      return new Response("Failed to retrieve file", {
+        status: 500,
+        headers: corsHeaders
+      });
+    }
+  }
+
+  // Get thumbnail from R2
+  async function handleGetThumbnail(url: URL, env: Env, corsHeaders: Record<string, string>): Promise<Response> {
+    const key = decodeURIComponent(url.pathname.replace("/api/thumbnail/", ""));
+    const size = url.searchParams.get("size") || "medium";
+
+    try {
+      // Map size to R2 path
+      const sizeMap: Record<string, string> = {
+        small: "thumbnails/small",
+        medium: "thumbnails/medium",
+        large: "thumbnails/large"
+      };
+
+      const prefix = sizeMap[size] || sizeMap.medium;
+      const thumbnailKey = `${prefix}/${key}`;
+
+      const object = await env.R2_BUCKET.get(thumbnailKey);
+
+      if (!object) {
+        return new Response("Thumbnail not found", { status: 404 });
+      }
+
+      const headers = new Headers();
+      object.writeHttpMetadata(headers);
+      headers.set("Cache-Control", "public, max-age=2592000"); // Cache for 30 days
+      headers.set("etag", object.httpEtag);
+      Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
+
+      return new Response(object.body, { headers });
+    } catch (_error) {
+      return new Response("Failed to retrieve thumbnail", {
         status: 500,
         headers: corsHeaders
       });

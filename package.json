@@ -1,5 +1,6 @@
 {
   "name": "wedding-gallery",
+  "type": "module",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -8,14 +9,33 @@
     "dev:album": "cd workers/album && npx wrangler dev",
     "deploy:viewer": "cd workers/viewer && npx wrangler deploy",
     "deploy:album": "cd workers/album && npx wrangler deploy",
-    "deploy:all": "npm run deploy:viewer && npm run deploy:album"
+    "deploy:all": "npm run deploy:viewer && npm run deploy:album",
+    "test": "vitest",
+    "prepare": "husky install"
   },
   "workspaces": [
     "workers/*"
   ],
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.901.0",
+    "@cloudflare/vitest-pool-workers": "^0.9.9",
     "@cloudflare/workers-types": "^4.20251001.0",
+    "@eslint/js": "^9.36.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@typescript-eslint/eslint-plugin": "^8.45.0",
+    "@typescript-eslint/parser": "^8.45.0",
+    "better-sqlite3": "^12.4.1",
+    "eslint": "^9.36.0",
+    "husky": "^8.0.0",
+    "lint-staged": "^15.5.2",
+    "sharp": "^0.34.4",
     "typescript": "^5.9.3",
+    "vitest": "^3.2.4",
     "wrangler": "^4.41.0"
+  },
+  "lint-staged": {
+    "*.{js,ts,tsx}": [
+      "eslint --fix"
+    ]
   }
 }

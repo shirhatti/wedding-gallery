@@ -1,0 +1,9 @@
+name = "process-locally"
+main = "scripts/process-locally.ts"
+compatibility_date = "2024-01-01"
+
+[[r2_buckets]]
+binding = "PHOTOS_BUCKET"
+bucket_name = "wedding-photos"
+preview_bucket_name = "wedding-photos"
+remote = true

@@ -23,3 +23,7 @@ Thumbs.db
 # Build outputs
 dist/
 .cache/
+
+# Local database files
+*.db
+*.sql

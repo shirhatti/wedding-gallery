@@ -8,6 +8,12 @@ binding = "R2_BUCKET"
 bucket_name = "wedding-photos"
 preview_bucket_name = "wedding-photos"
 
+# D1 database for photo metadata
+[[d1_databases]]
+binding = "DB"
+database_name = "wedding-photos-metadata"
+database_id = "150012ba-e8d4-4e02-8769-aafd24fe08d0"
+
 # Development settings
 [dev]
 port = 8787
