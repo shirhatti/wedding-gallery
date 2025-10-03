@@ -7,6 +7,7 @@ import htmlContent from "./index.html";
 
 interface Env {
   PHOTOS_BUCKET: R2Bucket;
+  DB: D1Database;
 }
 
 export default {
@@ -56,10 +57,34 @@ export default {
           },
         });
 
+        const uploadedAt = new Date().toISOString();
+        const fileType = isVideo ? "video" : "image";
+
+        // Insert into media table (EXIF will be extracted by thumbnail generation job)
+        await env.DB.prepare(`
+          INSERT OR REPLACE INTO media (
+            key, filename, type, size, uploaded_at, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          fileName,
+          file.name,
+          fileType,
+          file.size,
+          uploadedAt,
+          uploadedAt,
+          uploadedAt
+        ).run();
+
+        // Add to pending_thumbnails queue for processing
+        await env.DB.prepare(`
+          INSERT OR IGNORE INTO pending_thumbnails (key, created_at)
+          VALUES (?, ?)
+        `).bind(fileName, uploadedAt).run();
+
         return new Response(JSON.stringify({
           success: true,
           fileName: fileName,
-          fileType: isVideo ? "video" : "image"
+          fileType: fileType
         }), {
           headers: {
             "Content-Type": "application/json",

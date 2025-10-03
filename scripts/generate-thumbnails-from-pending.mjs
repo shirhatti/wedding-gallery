@@ -1,11 +1,13 @@
 /**
  * Generate thumbnails for pending items in D1
+ * Also extracts and updates EXIF metadata for web-uploaded images
  */
 
 import sharp from 'sharp';
 import { unstable_dev } from 'wrangler';
 import { execSync } from 'child_process';
 import { writeFileSync } from 'fs';
+import exifr from 'exifr';
 
 async function uploadToR2(worker, key, buffer, contentType = 'image/webp') {
   const resp = await worker.fetch('http://localhost/upload', {
@@ -71,6 +73,53 @@ async function main() {
 
         const arrayBuffer = await imageResp.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
+
+        // Extract EXIF metadata
+        let exif = null;
+        try {
+          exif = await exifr.parse(buffer, {
+            pick: ['DateTimeOriginal', 'Make', 'Model', 'LensModel',
+                   'FocalLength', 'FNumber', 'ExposureTime', 'ISO',
+                   'latitude', 'longitude', 'GPSAltitude']
+          });
+        } catch (e) {
+          // No EXIF data
+        }
+
+        // Update media table with EXIF if found
+        if (exif) {
+          const normalize = (val) => {
+            if (val === null || val === undefined) return null;
+            if (typeof val === 'object') return null;
+            return val;
+          };
+
+          const escape = (val) => val ? `'${String(val).replace(/'/g, "''")}'` : 'NULL';
+
+          const updateSql = `
+            UPDATE media SET
+              date_taken = ${escape(normalize(exif?.DateTimeOriginal))},
+              camera_make = ${escape(normalize(exif?.Make))},
+              camera_model = ${escape(normalize(exif?.Model))},
+              lens = ${escape(normalize(exif?.LensModel))},
+              focal_length = ${normalize(exif?.FocalLength) || 'NULL'},
+              aperture = ${normalize(exif?.FNumber) || 'NULL'},
+              shutter_speed = ${normalize(exif?.ExposureTime) || 'NULL'},
+              iso = ${normalize(exif?.ISO) || 'NULL'},
+              latitude = ${normalize(exif?.latitude) || 'NULL'},
+              longitude = ${normalize(exif?.longitude) || 'NULL'},
+              altitude = ${normalize(exif?.GPSAltitude) || 'NULL'},
+              metadata = ${escape(JSON.stringify(exif))},
+              updated_at = ${escape(new Date().toISOString())}
+            WHERE key = ${escape(key)};
+          `;
+
+          writeFileSync('/tmp/exif-update.sql', updateSql);
+          execSync('npx wrangler d1 execute wedding-photos-metadata --file=/tmp/exif-update.sql --remote', {
+            cwd: 'workers/viewer',
+            stdio: 'pipe'
+          });
+        }
 
         // Generate thumbnails (rotate() auto-rotates based on EXIF orientation)
         const [small, medium, large] = await Promise.all([
