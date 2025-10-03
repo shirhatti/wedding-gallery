@@ -342,39 +342,6 @@ export function getCSS() {
         opacity: 0.8;
     }
     
-    /* Double-tap to like animation (mobile only) */
-    @media (max-width: 768px) {
-        .like-heart {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) scale(0);
-            width: 80px;
-            height: 80px;
-            pointer-events: none;
-            z-index: 10;
-        }
-        
-        .like-heart.animate {
-            animation: likeAnimation 0.8s ease-out;
-        }
-        
-        @keyframes likeAnimation {
-            0% {
-                transform: translate(-50%, -50%) scale(0);
-                opacity: 1;
-            }
-            50% {
-                transform: translate(-50%, -50%) scale(1.2);
-                opacity: 1;
-            }
-            100% {
-                transform: translate(-50%, -50%) scale(1);
-                opacity: 0;
-            }
-        }
-    }
-    
     /* Improved mobile scrolling performance */
     @media (max-width: 768px) {
         * {
@@ -430,16 +397,14 @@ export function getJavaScript() {
             
             if (isVideo) {
                 return '<div class="gallery-item" data-index="' + dataIndex + '" ' + onclickAttr + '>' +
-                    '<video class="media-lazy" data-src="/api/file/' + item.key + '" muted playsinline ' + 
+                    '<video class="media-lazy" data-src="/api/file/' + item.key + '" muted playsinline ' +
                     (isMobile ? 'controls' : '') + ' preload="metadata"></video>' +
                     (!isMobile ? '<div class="play-overlay"></div>' : '') +
                     '<div class="video-indicator">📹 Video</div>' +
-                    (isMobile ? '<div class="like-heart">❤️</div>' : '') +
                     '</div>';
             } else {
                 return '<div class="gallery-item" data-index="' + dataIndex + '" ' + onclickAttr + '>' +
-                    '<img class="media-lazy" data-src="/api/file/' + item.key + '" alt="' + item.name + '" loading="lazy">' +
-                    (isMobile ? '<div class="like-heart">❤️</div>' : '') +
+                    '<img class="media-lazy" data-src="/api/thumbnail/' + item.key + '?size=medium" alt="' + item.name + '" loading="lazy">' +
                     '</div>';
             }
         }).join('');
@@ -482,32 +447,21 @@ export function getJavaScript() {
     // Setup mobile-specific interactions
     function setupMobileInteractions() {
         let lastTap = 0;
-        
+
+        // Double-tap to open lightbox
         document.querySelectorAll('.gallery-item').forEach((item, index) => {
-            const media = item.querySelector('img, video');
-            if (!media || media.tagName === 'VIDEO') return; // Skip videos for double-tap
-            
-            // Double-tap to "like" animation (images only)
             item.addEventListener('touchend', function(e) {
-                if (e.target.tagName === 'VIDEO') return;
-                
                 const currentTime = new Date().getTime();
                 const tapLength = currentTime - lastTap;
-                
+
                 if (tapLength < 500 && tapLength > 0) {
                     e.preventDefault();
-                    // Show heart animation
-                    const heart = this.querySelector('.like-heart');
-                    if (heart) {
-                        heart.classList.remove('animate');
-                        void heart.offsetWidth; // Trigger reflow
-                        heart.classList.add('animate');
-                    }
+                    openLightbox(index);
                 }
                 lastTap = currentTime;
             });
         });
-        
+
         // Track scroll position
         let scrollTimeout;
         window.addEventListener('scroll', () => {
@@ -524,13 +478,11 @@ export function getJavaScript() {
         });
     }
     
-    // Open lightbox (desktop only)
+    // Open lightbox
     function openLightbox(index) {
-        if (isMobile) return;
-        
         currentIndex = index;
         updateLightbox();
-        
+
         if (!lightboxModal) {
             lightboxModal = new bootstrap.Modal(document.getElementById('lightbox'));
         }
@@ -615,6 +567,23 @@ export function getJavaScript() {
                 video.src = '';
             }
         });
+
+        // Double-tap to close on mobile
+        if (isMobile) {
+            let lastTap = 0;
+            const modalBody = lightboxEl.querySelector('.modal-body');
+
+            modalBody.addEventListener('touchend', function(e) {
+                const currentTime = new Date().getTime();
+                const tapLength = currentTime - lastTap;
+
+                if (tapLength < 500 && tapLength > 0) {
+                    e.preventDefault();
+                    closeLightbox();
+                }
+                lastTap = currentTime;
+            });
+        }
     }
     
     // Initialize

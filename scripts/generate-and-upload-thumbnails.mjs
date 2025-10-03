@@ -64,11 +64,11 @@ async function main() {
         const arrayBuffer = await imageResp.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
 
-        // Generate thumbnails
+        // Generate thumbnails (rotate() auto-rotates based on EXIF orientation)
         const [small, medium, large] = await Promise.all([
-          sharp(buffer).resize(150, 150, { fit: 'cover' }).webp({ quality: 80 }).toBuffer(),
-          sharp(buffer).resize(400, 400, { fit: 'cover' }).webp({ quality: 85 }).toBuffer(),
-          sharp(buffer).resize(800, 800, { fit: 'inside' }).webp({ quality: 90 }).toBuffer(),
+          sharp(buffer).rotate().resize(150, 150, { fit: 'cover' }).webp({ quality: 80 }).toBuffer(),
+          sharp(buffer).rotate().resize(400, 400, { fit: 'cover' }).webp({ quality: 85 }).toBuffer(),
+          sharp(buffer).rotate().resize(800, 800, { fit: 'inside' }).webp({ quality: 90 }).toBuffer(),
         ]);
 
         // Upload thumbnails to R2
