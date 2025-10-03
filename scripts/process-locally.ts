@@ -95,6 +95,28 @@ export default {
       return new Response('OK');
     }
 
+    if (url.pathname === '/list-thumbnails') {
+      // List all thumbnails with a specific prefix
+      const prefix = url.searchParams.get('prefix') || 'thumbnails/medium/';
+      const allKeys: string[] = [];
+      let cursor: string | undefined;
+
+      do {
+        const result = await env.PHOTOS_BUCKET.list({
+          prefix,
+          cursor,
+          limit: 1000
+        });
+
+        allKeys.push(...result.objects.map(obj => obj.key));
+        cursor = result.truncated ? result.cursor : undefined;
+      } while (cursor);
+
+      return new Response(JSON.stringify({ keys: allKeys }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     return new Response('Not found', { status: 404 });
   }
 };

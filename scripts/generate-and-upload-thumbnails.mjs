@@ -7,6 +7,8 @@ import sharp from 'sharp';
 import { unstable_dev } from 'wrangler';
 
 const DB_PATH = './wedding-photos-metadata.db';
+const DRY_RUN = !process.argv.includes('--generate');
+const FORCE_REGENERATE = process.argv.includes('--force');
 
 async function uploadToR2(worker, key, buffer, contentType = 'image/webp') {
   const resp = await worker.fetch('http://localhost/upload', {
@@ -29,6 +31,14 @@ async function uploadToR2(worker, key, buffer, contentType = 'image/webp') {
 async function main() {
   console.log('Starting worker...');
 
+  if (DRY_RUN) {
+    console.log('🔍 DRY RUN MODE: Will only show what would be generated');
+    console.log('   Run with --generate to actually create thumbnails');
+    console.log('   Add --force to regenerate all thumbnails\n');
+  } else {
+    console.log(FORCE_REGENERATE ? '🔄 Force regenerate mode: Regenerating ALL thumbnails' : '📸 Generate mode: Creating missing thumbnails');
+  }
+
   const worker = await unstable_dev('scripts/process-locally.ts', {
     config: 'scripts/wrangler-process-locally.toml',
     experimental: { disableExperimentalWarning: true },
@@ -38,22 +48,49 @@ async function main() {
   try {
     const db = new Database(DB_PATH);
 
-    // Get all images that need thumbnails
+    // Get all images from database
     const images = db.prepare(`
       SELECT key FROM media
       WHERE type = 'image'
     `).all();
 
-    console.log(`Found ${images.length} images to process`);
+    console.log(`Found ${images.length} images in database`);
 
-    let processed = 0;
+    // List all existing thumbnails from R2 in one batch operation
+    console.log('Fetching existing thumbnails from R2...');
+    const thumbResp = await worker.fetch('http://localhost/list-thumbnails?prefix=thumbnails/medium/');
+    const { keys: existingThumbs } = await thumbResp.json();
+    const existingSet = new Set(existingThumbs.map(k => k.replace('thumbnails/medium/', '')));
+
+    console.log(`Found ${existingSet.size} existing thumbnails`);
+    console.log(`Checking ${images.length} images against existing thumbnails...\n`);
+
+    let toGenerate = 0;
+    let skipped = 0;
     let failed = 0;
 
     for (const row of images) {
       const key = row.key;
 
+      // Check if thumbnails already exist (unless force mode)
+      if (!FORCE_REGENERATE && existingSet.has(key)) {
+        skipped++;
+        if (DRY_RUN) {
+          console.log(`[${toGenerate + skipped + failed + 1}/${images.length}] ⏭️  ${key} (thumbnails exist)`);
+        } else {
+          console.log(`[${toGenerate + skipped + failed + 1}/${images.length}] Skipping ${key} (thumbnails exist)`);
+        }
+        continue;
+      }
+
+      if (DRY_RUN) {
+        toGenerate++;
+        console.log(`[${toGenerate + skipped + failed + 1}/${images.length}] 📋 Would generate: ${key}`);
+        continue;
+      }
+
       try {
-        console.log(`[${processed + failed + 1}/${images.length}] Processing ${key}...`);
+        console.log(`[${toGenerate + skipped + failed + 1}/${images.length}] Processing ${key}...`);
 
         // Download full image from R2
         const imageResp = await worker.fetch(`http://localhost/get-full?key=${encodeURIComponent(key)}`);
@@ -78,7 +115,7 @@ async function main() {
           uploadToR2(worker, `thumbnails/large/${key}`, large),
         ]);
 
-        processed++;
+        toGenerate++;
         console.log(`  ✓ Generated and uploaded thumbnails`);
       } catch (error) {
         console.error(`  ✗ Failed: ${error.message}`);
@@ -89,8 +126,15 @@ async function main() {
     db.close();
 
     console.log(`\nDone!`);
-    console.log(`Processed: ${processed}`);
-    console.log(`Failed: ${failed}`);
+    if (DRY_RUN) {
+      console.log(`Would generate: ${toGenerate}`);
+      console.log(`Already exist: ${skipped}`);
+      console.log(`\n💡 Run with --generate to create these thumbnails`);
+    } else {
+      console.log(`Generated: ${toGenerate}`);
+      console.log(`Skipped: ${skipped}`);
+      console.log(`Failed: ${failed}`);
+    }
 
   } finally {
     await worker.stop();

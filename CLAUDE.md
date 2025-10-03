@@ -1,1 +1,2 @@
 - never force push
+- never run wrangler deploy. Always push to source control, CI will deploy
