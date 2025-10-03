@@ -5,8 +5,8 @@ compatibility_date = "2024-01-01"
 # R2 bucket binding (same bucket as gallery)
 [[r2_buckets]]
 binding = "PHOTOS_BUCKET"
-bucket_name = "wedding-photos-metadata"
-preview_bucket_name = "wedding-photos-metadata"
+bucket_name = "wedding-photos"
+preview_bucket_name = "wedding-photos"
 
 # D1 database binding
 [[d1_databases]]
