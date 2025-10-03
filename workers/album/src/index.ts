@@ -5,8 +5,12 @@
 
 import htmlContent from './index.html';
 
+interface Env {
+  PHOTOS_BUCKET: R2Bucket;
+}
+
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     // Serve the HTML page for GET requests
@@ -22,7 +26,7 @@ export default {
     if (request.method === 'POST' && url.pathname === '/upload') {
       try {
         const formData = await request.formData();
-        const file = formData.get('files[]');
+        const file = formData.get('files[]') as File | null;
 
         if (!file) {
           return new Response('No file uploaded', { status: 400 });

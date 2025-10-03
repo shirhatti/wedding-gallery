@@ -1,10 +1,11 @@
 // R2 Image & Video Gallery Worker with Instagram-style mobile view
-// Paste this entire code into Cloudflare Workers editor
-// After creating the worker, bind your R2 bucket in Settings > Variables > R2 Bucket Bindings
-// Add a binding with variable name: R2_BUCKET
+
+interface Env {
+  R2_BUCKET: R2Bucket;
+}
 
 export default {
-    async fetch(request, env) {
+    async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
       const url = new URL(request.url);
 
       // CORS headers
@@ -34,7 +35,7 @@ export default {
   };
 
   // Serve the main gallery HTML page
-  function handleHomePage() {
+  function handleHomePage(): Response {
     const html = `<!DOCTYPE html>
   <html lang="en">
   <head>
@@ -656,7 +657,7 @@ export default {
   }
 
   // List all media files from R2 bucket
-  async function handleListMedia(env, corsHeaders) {
+  async function handleListMedia(env: Env, corsHeaders: Record<string, string>): Promise<Response> {
     try {
       const list = await env.R2_BUCKET.list({ limit: 1000 });
 
@@ -708,7 +709,7 @@ export default {
   }
 
   // Get a specific file from R2 (with range support for videos)
-  async function handleGetFile(url, env, corsHeaders, request) {
+  async function handleGetFile(url: URL, env: Env, corsHeaders: Record<string, string>, request: Request): Promise<Response> {
     const key = decodeURIComponent(url.pathname.replace('/api/file/', ''));
 
     try {
