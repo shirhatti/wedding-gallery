@@ -4,6 +4,7 @@ import { handleGetFile } from "./handlers/media";
 interface Env {
   R2_BUCKET: R2Bucket;
   DB: D1Database;
+  GALLERY_PASSWORD?: string; // Simple password for gallery access
 }
 
 export default {
@@ -13,14 +14,47 @@ export default {
       // CORS headers
       const corsHeaders = {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Range",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Range, Cookie",
         "Accept-Ranges": "bytes",
       };
 
       // Handle CORS preflight
       if (request.method === "OPTIONS") {
         return new Response(null, { headers: corsHeaders });
+      }
+
+      // Login page and authentication
+      if (url.pathname === "/login") {
+        if (request.method === "POST") {
+          const formData = await request.formData();
+          const password = formData.get("password")?.toString() || "";
+
+          if (env.GALLERY_PASSWORD && password === env.GALLERY_PASSWORD) {
+            const headers = new Headers();
+            headers.set("Set-Cookie", `gallery_auth=${env.GALLERY_PASSWORD}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`);
+            headers.set("Location", "/");
+            return new Response(null, { status: 302, headers });
+          }
+
+          return new Response(getLoginPage(true), {
+            headers: { "Content-Type": "text/html" }
+          });
+        }
+        return new Response(getLoginPage(false), {
+          headers: { "Content-Type": "text/html" }
+        });
+      }
+
+      // Check authentication if password is set
+      if (env.GALLERY_PASSWORD) {
+        const cookies = request.headers.get("Cookie") || "";
+        const authCookie = cookies.split(";").find(c => c.trim().startsWith("gallery_auth="));
+        const authValue = authCookie?.split("=")[1];
+
+        if (authValue !== env.GALLERY_PASSWORD) {
+          return Response.redirect(url.origin + "/login", 302);
+        }
       }
 
       // Route handling
@@ -37,6 +71,118 @@ export default {
       return new Response("Not Found", { status: 404 });
     },
   };
+
+  function getLoginPage(error: boolean): string {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gallery Login</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+
+        .login-container {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            width: 90%;
+            max-width: 400px;
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .logo img {
+            height: 60px;
+            width: auto;
+        }
+
+        h1 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1.75rem;
+            color: #333;
+            text-align: center;
+        }
+
+        p {
+            margin: 0 0 2rem 0;
+            color: #666;
+            text-align: center;
+        }
+
+        .error {
+            background: #fee;
+            border: 1px solid #fcc;
+            color: #c33;
+            padding: 0.75rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        input[type="password"] {
+            width: 100%;
+            padding: 0.875rem;
+            border: 2px solid #e1e4e8;
+            border-radius: 6px;
+            font-size: 1rem;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+
+        input[type="password"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            width: 100%;
+            padding: 0.875rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 1rem;
+            transition: opacity 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo">
+            <img src="https://assets.shirhatti.com/weddinglogo.svg" alt="Wedding Logo">
+        </div>
+        <h1>Welcome</h1>
+        <p>Enter the password to view the gallery</p>
+        ${error ? "<div class=\"error\">Invalid password. Please try again.</div>" : ""}
+        <form method="POST">
+            <input type="password" name="password" placeholder="Enter password" required autofocus>
+            <button type="submit">Access Gallery</button>
+        </form>
+    </div>
+</body>
+</html>`;
+  }
 
   // List all media files from D1 database
   async function handleListMedia(env: Env, corsHeaders: Record<string, string>): Promise<Response> {
