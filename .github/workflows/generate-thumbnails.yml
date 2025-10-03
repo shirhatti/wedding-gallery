@@ -21,14 +21,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Process photos and create database
-        run: node scripts/process-photos.mjs
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: f974b5257387abc8b6e9e66734f27ec3
-
-      - name: Generate thumbnails
-        run: node scripts/generate-and-upload-thumbnails.mjs --generate
+      - name: Generate thumbnails from pending queue
+        run: node scripts/generate-thumbnails-from-pending.mjs
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: f974b5257387abc8b6e9e66734f27ec3
