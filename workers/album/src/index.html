@@ -134,6 +134,28 @@
             transform: scale(0.95);
         }
 
+        .dismiss-btn {
+            position: absolute;
+            bottom: 5px;
+            left: 5px;
+            background: #666;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .dismiss-btn:hover {
+            background: #444;
+        }
+
+        .dismiss-btn:active {
+            transform: scale(0.95);
+        }
+
         .interstitial {
             position: fixed;
             top: 0;
@@ -411,6 +433,9 @@
             const photoItem = document.createElement('div');
             photoItem.className = 'photo-item';
 
+            // Initialize retry counter
+            photoItem._retryCount = 0;
+
             // Create lightweight placeholder instead of blob URL to save memory
             const placeholder = document.createElement('div');
             placeholder.className = 'photo-placeholder';
@@ -440,7 +465,7 @@
             return photoItem;
         }
 
-        function updateStatus(photoItem, className, emoji, errorMessage = null) {
+        function updateStatus(photoItem, className, emoji, errorMessage = null, maxRetriesReached = false) {
             const status = photoItem.querySelector('.upload-status');
             status.className = `upload-status ${className}`;
             status.textContent = emoji;
@@ -463,18 +488,40 @@
                 status.style.transform = 'scale(1)';
             }, 300);
 
-            // Add retry button for failed uploads
-            if (className === 'error' && photoItem._file) {
-                // Remove existing retry button if any
+            // Handle failed uploads
+            if (className === 'error') {
+                // Remove existing buttons
                 const existingRetry = photoItem.querySelector('.retry-btn');
                 if (existingRetry) existingRetry.remove();
+                const existingDismiss = photoItem.querySelector('.dismiss-btn');
+                if (existingDismiss) existingDismiss.remove();
 
-                const retryBtn = document.createElement('button');
-                retryBtn.className = 'retry-btn';
-                retryBtn.textContent = '🔄 Retry';
-                retryBtn.setAttribute('aria-label', `Retry upload for ${photoItem._file.name}`);
-                retryBtn.onclick = () => retryUpload(photoItem);
-                photoItem.appendChild(retryBtn);
+                // Always add dismiss button
+                const dismissBtn = document.createElement('button');
+                dismissBtn.className = 'dismiss-btn';
+                dismissBtn.textContent = '✕ Dismiss';
+                dismissBtn.setAttribute('aria-label', 'Dismiss failed upload');
+                dismissBtn.onclick = () => {
+                    photoItem.remove();
+                    delete photoItem._file;
+                    delete photoItem._retryCount;
+                    delete photoItem._uploading;
+                };
+                photoItem.appendChild(dismissBtn);
+
+                // Add retry button only if max retries not reached and file still available
+                if (!maxRetriesReached && photoItem._file) {
+                    const retryBtn = document.createElement('button');
+                    retryBtn.className = 'retry-btn';
+                    retryBtn.textContent = '🔄 Retry';
+                    retryBtn.setAttribute('aria-label', `Retry upload for ${photoItem._file.name}`);
+                    retryBtn.onclick = () => retryUpload(photoItem);
+                    photoItem.appendChild(retryBtn);
+                } else if (maxRetriesReached) {
+                    // Clean up file reference when max retries reached
+                    delete photoItem._file;
+                    delete photoItem._retryCount;
+                }
             }
         }
 
@@ -485,9 +532,14 @@
             if (photoItem._uploading) return;
             photoItem._uploading = true;
 
-            // Remove retry button
+            // Increment retry counter
+            photoItem._retryCount = (photoItem._retryCount || 0) + 1;
+
+            // Remove retry and dismiss buttons
             const retryBtn = photoItem.querySelector('.retry-btn');
             if (retryBtn) retryBtn.remove();
+            const dismissBtn = photoItem.querySelector('.dismiss-btn');
+            if (dismissBtn) dismissBtn.remove();
 
             // Reset status to uploading
             const status = photoItem.querySelector('.upload-status');
@@ -522,24 +574,31 @@
 
                     // Clean up file reference to prevent memory leak
                     delete photoItem._file;
-                    delete photoItem._uploading;
+                    delete photoItem._retryCount;
                 } else {
-                    updateStatus(photoItem, 'error', '❌', 'Server error');
-                    console.error(`❌ Retry failed for ${photoItem._file.name}:`, result);
-                    photoItem._uploading = false;
+                    const maxRetries = 3;
+                    const errorMsg = photoItem._retryCount >= maxRetries ? 'Max retries reached' : 'Server error';
+                    updateStatus(photoItem, 'error', '❌', errorMsg, photoItem._retryCount >= maxRetries);
+                    console.error(`❌ Retry ${photoItem._retryCount} failed for ${photoItem._file.name}:`, result);
                 }
 
             } catch (error) {
                 clearTimeout(timeoutId);
-                photoItem._uploading = false;
 
+                const maxRetries = 3;
+                let errorMsg;
                 if (error.name === 'AbortError') {
-                    updateStatus(photoItem, 'error', '❌', 'Upload timeout');
-                    console.error(`⏱️ Retry timeout for ${photoItem._file.name}`);
+                    errorMsg = photoItem._retryCount >= maxRetries ? 'Max retries reached' : 'Upload timeout';
+                    console.error(`⏱️ Retry ${photoItem._retryCount} timeout for ${photoItem._file.name}`);
                 } else {
-                    updateStatus(photoItem, 'error', '❌', 'Network error');
-                    console.error(`❌ Retry error for ${photoItem._file.name}:`, error);
+                    errorMsg = photoItem._retryCount >= maxRetries ? 'Max retries reached' : 'Network error';
+                    console.error(`❌ Retry ${photoItem._retryCount} error for ${photoItem._file.name}:`, error);
                 }
+
+                updateStatus(photoItem, 'error', '❌', errorMsg, photoItem._retryCount >= maxRetries);
+            } finally {
+                // Always reset uploading flag to prevent stuck state
+                delete photoItem._uploading;
             }
         }
 
