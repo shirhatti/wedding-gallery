@@ -11,6 +11,12 @@ repository:
   has_wiki: false
   has_downloads: true
 
+  # Merge settings - disable all merge methods to prevent accidental SHA changes
+  # Use CLI for fast-forward merges to keep branches in sync
+  allow_merge_commit: false  # No merge commits
+  allow_squash_merge: false  # No squash
+  allow_rebase_merge: false  # No rebase (creates new SHAs)
+
 branches:
   - name: main
     protection:
