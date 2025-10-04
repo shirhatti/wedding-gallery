@@ -49,11 +49,9 @@ branches:
       # Require linear history (fast-forward only)
       required_linear_history: true
 
-      # Require PRs to release (no direct pushes)
-      required_pull_request_reviews:
-        required_approving_review_count: 1
-        dismiss_stale_reviews: false
-        require_code_owner_reviews: false
+      # No PR requirement (single developer - can't self-approve)
+      # Use PRs as best practice, but rely on tests + linear history
+      required_pull_request_reviews: null
 
       # Enforce on admins (prevents accidental pushes, use break glass if needed)
       enforce_admins: true
