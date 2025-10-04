@@ -41,5 +41,8 @@
     "*.{js,ts,tsx}": [
       "eslint --fix"
     ]
+  },
+  "dependencies": {
+    "@ffprobe-installer/ffprobe": "^2.1.2"
   }
 }

@@ -6,6 +6,7 @@
 import sharp from 'sharp';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from '@ffmpeg-installer/ffmpeg';
+import ffprobePath from '@ffprobe-installer/ffprobe';
 import { promisify } from 'util';
 import { writeFile, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -13,8 +14,9 @@ import { join } from 'path';
 import exifr from 'exifr';
 import convert from 'heic-convert';
 
-// Configure ffmpeg
+// Configure ffmpeg and ffprobe
 ffmpeg.setFfmpegPath(ffmpegPath.path);
+ffmpeg.setFfprobePath(ffprobePath.path);
 
 /**
  * Upload buffer to R2 via worker
