@@ -3,11 +3,10 @@
  * Processes all videos in the database that don't have HLS versions yet
  */
 
-import Database from 'better-sqlite3';
 import { unstable_dev } from 'wrangler';
+import { execSync } from 'child_process';
 import { convertToHLS, uploadHLSToR2 } from './lib/hls-converter.mjs';
 
-const DB_PATH = './wedding-photos-metadata.db';
 const DRY_RUN = !process.argv.includes('--convert');
 const FORCE_RECONVERT = process.argv.includes('--force');
 
@@ -29,13 +28,16 @@ async function main() {
   });
 
   try {
-    const db = new Database(DB_PATH);
+    // Query videos from D1
+    console.log('Fetching videos from D1...');
+    const result = execSync('npx wrangler d1 execute wedding-photos-metadata --command "SELECT key, filename FROM media WHERE type = \'video\'" --json --remote', {
+      cwd: 'workers/viewer',
+      encoding: 'utf8',
+      stdio: ['inherit', 'pipe', 'inherit']
+    });
 
-    // Get all videos from database
-    const videos = db.prepare(`
-      SELECT key, filename FROM media
-      WHERE type = 'video'
-    `).all();
+    const data = JSON.parse(result);
+    const videos = data[0]?.results || [];
 
     console.log(`Found ${videos.length} videos in database`);
 
@@ -104,8 +106,6 @@ async function main() {
         failed++;
       }
     }
-
-    db.close();
 
     console.log(`\nDone!`);
     if (DRY_RUN) {
