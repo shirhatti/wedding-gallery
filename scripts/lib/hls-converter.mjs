@@ -124,6 +124,7 @@ async function convertToHLSQuality(videoPath, outputDir, preset) {
       .outputOptions([
         '-c:v libx264',           // Video codec
         '-c:a aac',               // Audio codec
+        '-pix_fmt yuv420p',       // Force 8-bit color (compatibility)
         '-preset fast',           // Encoding speed
         '-profile:v main',        // H.264 profile
         `-s ${preset.resolution}`, // Scale to resolution
