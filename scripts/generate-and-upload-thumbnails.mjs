@@ -88,7 +88,7 @@ async function main() {
         const buffer = Buffer.from(arrayBuffer);
 
         // Generate thumbnails (handles both images and videos)
-        const thumbnails = await generateThumbnails(buffer, mediaType);
+        const thumbnails = await generateThumbnails(buffer, mediaType, key);
 
         // Upload thumbnails to R2
         await uploadThumbnails(worker, key, thumbnails);

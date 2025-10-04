@@ -11,6 +11,7 @@ import { writeFile, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import exifr from 'exifr';
+import convert from 'heic-convert';
 
 // Configure ffmpeg
 ffmpeg.setFfmpegPath(ffmpegPath.path);
@@ -79,12 +80,24 @@ export async function extractVideoThumbnail(videoBuffer) {
 /**
  * Generate thumbnails for an image
  */
-export async function generateImageThumbnails(buffer) {
+export async function generateImageThumbnails(buffer, filename = '') {
+  let processBuffer = buffer;
+
+  // Convert HEIC to JPEG first if needed
+  if (filename.toLowerCase().endsWith('.heic')) {
+    console.log('  Converting HEIC to JPEG...');
+    processBuffer = Buffer.from(await convert({
+      buffer: buffer,
+      format: 'JPEG',
+      quality: 0.95
+    }));
+  }
+
   // Generate thumbnails (rotate() auto-rotates based on EXIF orientation)
   const [small, medium, large] = await Promise.all([
-    sharp(buffer).rotate().resize(150, 150, { fit: 'cover' }).webp({ quality: 80 }).toBuffer(),
-    sharp(buffer).rotate().resize(400, 400, { fit: 'cover' }).webp({ quality: 85 }).toBuffer(),
-    sharp(buffer).rotate().resize(800, 800, { fit: 'inside' }).webp({ quality: 90 }).toBuffer(),
+    sharp(processBuffer).rotate().resize(150, 150, { fit: 'cover' }).webp({ quality: 80 }).toBuffer(),
+    sharp(processBuffer).rotate().resize(400, 400, { fit: 'cover' }).webp({ quality: 85 }).toBuffer(),
+    sharp(processBuffer).rotate().resize(800, 800, { fit: 'inside' }).webp({ quality: 90 }).toBuffer(),
   ]);
 
   return { small, medium, large };
@@ -110,11 +123,11 @@ export async function generateVideoThumbnails(videoBuffer) {
 /**
  * Generate thumbnails for any media type (image or video)
  */
-export async function generateThumbnails(buffer, mediaType) {
+export async function generateThumbnails(buffer, mediaType, filename = '') {
   if (mediaType === 'video') {
     return await generateVideoThumbnails(buffer);
   } else {
-    return await generateImageThumbnails(buffer);
+    return await generateImageThumbnails(buffer, filename);
   }
 }
 
