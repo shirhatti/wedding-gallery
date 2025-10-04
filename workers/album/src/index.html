@@ -288,6 +288,7 @@
         // Configuration constants
         const MAX_CONCURRENT_UPLOADS = 3;
         const UPLOAD_TIMEOUT_MS = 60000; // 60 seconds
+        const MAX_RETRY_ATTEMPTS = 3;
 
         const fileInput = document.getElementById('fileInput');
         const uploadArea = document.querySelector('.upload-area');
@@ -361,6 +362,63 @@
             fileInput.value = '';
         }
 
+        async function performUpload(file, photoItem, isRetry = false) {
+            const formData = new FormData();
+            formData.append('files[]', file);
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData,
+                    signal: controller.signal
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    updateStatus(photoItem, 'success', '✅');
+                    console.log(`✅ ${isRetry ? 'Retry' : 'Upload'} successful: ${result.fileName}`);
+
+                    // Track successful uploads
+                    window.successfulUploads = (window.successfulUploads || 0) + 1;
+
+                    // Clean up file reference to prevent memory leak
+                    delete photoItem._file;
+                    if (isRetry) delete photoItem._retryCount;
+                } else {
+                    const maxRetriesReached = isRetry && photoItem._retryCount >= MAX_RETRY_ATTEMPTS;
+                    const errorMsg = maxRetriesReached ? 'Max retries reached' : 'Server error';
+                    updateStatus(photoItem, 'error', '❌', errorMsg, maxRetriesReached);
+                    console.error(`❌ ${isRetry ? 'Retry' : 'Upload'} failed for ${file.name}:`, result);
+                }
+
+            } catch (error) {
+                let errorMsg;
+                const maxRetriesReached = isRetry && photoItem._retryCount >= MAX_RETRY_ATTEMPTS;
+
+                if (error.name === 'AbortError') {
+                    errorMsg = maxRetriesReached ? 'Max retries reached' : 'Upload timeout';
+                    console.error(`⏱️ ${isRetry ? 'Retry' : 'Upload'} timeout for ${file.name}`);
+                } else {
+                    errorMsg = maxRetriesReached ? 'Max retries reached' : 'Network error';
+                    console.error(`❌ ${isRetry ? 'Retry' : 'Upload'} error for ${file.name}:`, error);
+                }
+
+                updateStatus(photoItem, 'error', '❌', errorMsg, maxRetriesReached);
+            } finally {
+                // Always clear timeout to prevent memory leak
+                clearTimeout(timeoutId);
+
+                // Always reset uploading flag for retries to prevent stuck state
+                if (isRetry) {
+                    delete photoItem._uploading;
+                }
+            }
+        }
+
         async function uploadWithConcurrency(files, limit) {
             const executing = new Set();
 
@@ -384,49 +442,7 @@
             photoItem._file = file; // Store file reference for retry
             photoGrid.appendChild(photoItem);
 
-            // Prepare upload data
-            const formData = new FormData();
-            formData.append('files[]', file);
-
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
-
-            try {
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData,
-                    signal: controller.signal
-                });
-
-                clearTimeout(timeoutId);
-
-                const result = await response.json();
-
-                if (response.ok && result.success) {
-                    updateStatus(photoItem, 'success', '✅');
-                    console.log(`✅ Upload successful: ${result.fileName}`);
-
-                    // Track successful uploads
-                    window.successfulUploads = (window.successfulUploads || 0) + 1;
-
-                    // Clean up file reference to prevent memory leak
-                    delete photoItem._file;
-                } else {
-                    updateStatus(photoItem, 'error', '❌', 'Server error');
-                    console.error(`❌ Upload failed for ${file.name}:`, result);
-                }
-
-            } catch (error) {
-                clearTimeout(timeoutId);
-
-                if (error.name === 'AbortError') {
-                    updateStatus(photoItem, 'error', '❌', 'Upload timeout');
-                    console.error(`⏱️ Upload timeout for ${file.name}`);
-                } else {
-                    updateStatus(photoItem, 'error', '❌', 'Network error');
-                    console.error(`❌ Upload error for ${file.name}:`, error);
-                }
-            }
+            await performUpload(file, photoItem, false);
         }
 
         function createPhotoPreview(file) {
@@ -517,10 +533,16 @@
                     retryBtn.setAttribute('aria-label', `Retry upload for ${photoItem._file.name}`);
                     retryBtn.onclick = () => retryUpload(photoItem);
                     photoItem.appendChild(retryBtn);
+
+                    // Focus retry button for keyboard accessibility
+                    setTimeout(() => retryBtn.focus(), 100);
                 } else if (maxRetriesReached) {
                     // Clean up file reference when max retries reached
                     delete photoItem._file;
                     delete photoItem._retryCount;
+
+                    // Focus dismiss button when retry is not available
+                    setTimeout(() => dismissBtn.focus(), 100);
                 }
             }
         }
@@ -547,59 +569,7 @@
             status.textContent = '⏳';
             status.setAttribute('aria-label', 'Upload in progress');
 
-            // Prepare upload data
-            const formData = new FormData();
-            formData.append('files[]', photoItem._file);
-
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
-
-            try {
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData,
-                    signal: controller.signal
-                });
-
-                clearTimeout(timeoutId);
-
-                const result = await response.json();
-
-                if (response.ok && result.success) {
-                    updateStatus(photoItem, 'success', '✅');
-                    console.log(`✅ Retry successful: ${result.fileName}`);
-
-                    // Track successful uploads
-                    window.successfulUploads = (window.successfulUploads || 0) + 1;
-
-                    // Clean up file reference to prevent memory leak
-                    delete photoItem._file;
-                    delete photoItem._retryCount;
-                } else {
-                    const maxRetries = 3;
-                    const errorMsg = photoItem._retryCount >= maxRetries ? 'Max retries reached' : 'Server error';
-                    updateStatus(photoItem, 'error', '❌', errorMsg, photoItem._retryCount >= maxRetries);
-                    console.error(`❌ Retry ${photoItem._retryCount} failed for ${photoItem._file.name}:`, result);
-                }
-
-            } catch (error) {
-                clearTimeout(timeoutId);
-
-                const maxRetries = 3;
-                let errorMsg;
-                if (error.name === 'AbortError') {
-                    errorMsg = photoItem._retryCount >= maxRetries ? 'Max retries reached' : 'Upload timeout';
-                    console.error(`⏱️ Retry ${photoItem._retryCount} timeout for ${photoItem._file.name}`);
-                } else {
-                    errorMsg = photoItem._retryCount >= maxRetries ? 'Max retries reached' : 'Network error';
-                    console.error(`❌ Retry ${photoItem._retryCount} error for ${photoItem._file.name}:`, error);
-                }
-
-                updateStatus(photoItem, 'error', '❌', errorMsg, photoItem._retryCount >= maxRetries);
-            } finally {
-                // Always reset uploading flag to prevent stuck state
-                delete photoItem._uploading;
-            }
+            await performUpload(photoItem._file, photoItem, true);
         }
 
         // Utility function to format file sizes (for debugging)
