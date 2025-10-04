@@ -121,6 +121,13 @@ async function convertToHLSQuality(videoPath, outputDir, preset) {
     const segmentPattern = `${preset.name}_%03d.ts`;
     let stderrOutput = '';
 
+    // Extract target height from preset resolution
+    const targetHeight = parseInt(preset.resolution.split('x')[1]);
+
+    // Use scale filter to preserve aspect ratio
+    // Scale based on height, width auto-calculated (-2 ensures even number)
+    const scaleFilter = `scale=-2:${targetHeight}`;
+
     const command = ffmpeg(videoPath)
       .outputOptions([
         '-c:v libx264',           // Video codec
@@ -128,7 +135,7 @@ async function convertToHLSQuality(videoPath, outputDir, preset) {
         '-pix_fmt yuv420p',       // Force 8-bit color (compatibility)
         '-preset fast',           // Encoding speed
         '-profile:v main',        // H.264 profile
-        `-s ${preset.resolution}`, // Scale to resolution
+        `-vf ${scaleFilter}`,     // Scale preserving aspect ratio
         `-b:v ${preset.videoBitrate}`,
         `-maxrate ${preset.maxrate}`,
         `-bufsize ${preset.bufsize}`,
@@ -160,12 +167,21 @@ async function convertToHLSQuality(videoPath, outputDir, preset) {
 async function createMasterPlaylist(outputDir, presets, metadata) {
   const lines = ['#EXTM3U', '#EXT-X-VERSION:3'];
 
+  // Calculate actual output resolutions preserving aspect ratio
+  const aspectRatio = metadata.width / metadata.height;
+
   for (const preset of presets) {
     const bandwidth = parseInt(preset.videoBitrate) * 1000 + parseInt(preset.audioBitrate) * 1000;
-    const resolution = preset.resolution;
+
+    // Calculate actual width based on target height and source aspect ratio
+    const targetHeight = parseInt(preset.resolution.split('x')[1]);
+    const actualWidth = Math.round(targetHeight * aspectRatio);
+    // Ensure even number (required for H.264)
+    const evenWidth = actualWidth % 2 === 0 ? actualWidth : actualWidth - 1;
+    const actualResolution = `${evenWidth}x${targetHeight}`;
 
     lines.push(
-      `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},RESOLUTION=${resolution}`,
+      `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},RESOLUTION=${actualResolution}`,
       `${preset.name}.m3u8`
     );
   }
