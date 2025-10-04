@@ -1,13 +1,13 @@
 /**
  * Generate thumbnails for pending items in D1
- * Also extracts and updates EXIF metadata for web-uploaded images
+ * Extracts and updates EXIF metadata for images and creation time for videos
  * Supports both images and videos
  */
 
 import { unstable_dev } from 'wrangler';
 import { execSync } from 'child_process';
 import { writeFileSync } from 'fs';
-import { generateThumbnails, uploadThumbnails, extractExifMetadata } from './lib/thumbnail-generator.mjs';
+import { generateThumbnails, uploadThumbnails, extractExifMetadata, extractVideoMetadata } from './lib/thumbnail-generator.mjs';
 
 async function main() {
   console.log('Starting worker...');
@@ -60,14 +60,16 @@ async function main() {
         const arrayBuffer = await mediaResp.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
 
-        // Extract EXIF metadata (only for images, not videos)
-        let exif = null;
+        // Extract metadata (EXIF for images, video metadata for videos)
+        let metadata = null;
         if (mediaType === 'image') {
-          exif = await extractExifMetadata(buffer);
+          metadata = await extractExifMetadata(buffer);
+        } else if (mediaType === 'video') {
+          metadata = await extractVideoMetadata(buffer);
         }
 
-        // Collect EXIF update SQL for batch execution later
-        if (exif) {
+        // Collect metadata update SQL for batch execution later
+        if (metadata) {
           const normalize = (val) => {
             if (val === null || val === undefined) return null;
             if (typeof val === 'object') return null;
@@ -76,22 +78,34 @@ async function main() {
 
           const escape = (val) => val ? `'${String(val).replace(/'/g, "''")}'` : 'NULL';
 
-          const updateSql = `
-            UPDATE media SET
-              date_taken = ${escape(normalize(exif?.DateTimeOriginal))},
-              camera_make = ${escape(normalize(exif?.Make))},
-              camera_model = ${escape(normalize(exif?.Model))},
-              lens = ${escape(normalize(exif?.LensModel))},
-              focal_length = ${normalize(exif?.FocalLength) || 'NULL'},
-              aperture = ${normalize(exif?.FNumber) || 'NULL'},
-              shutter_speed = ${normalize(exif?.ExposureTime) || 'NULL'},
-              iso = ${normalize(exif?.ISO) || 'NULL'},
-              latitude = ${normalize(exif?.latitude) || 'NULL'},
-              longitude = ${normalize(exif?.longitude) || 'NULL'},
-              altitude = ${normalize(exif?.GPSAltitude) || 'NULL'},
-              metadata = ${escape(JSON.stringify(exif))},
-              updated_at = ${escape(new Date().toISOString())}
-            WHERE key = ${escape(key)}`;
+          let updateSql;
+          if (mediaType === 'image') {
+            // Image EXIF data
+            updateSql = `
+              UPDATE media SET
+                date_taken = ${escape(normalize(metadata?.DateTimeOriginal))},
+                camera_make = ${escape(normalize(metadata?.Make))},
+                camera_model = ${escape(normalize(metadata?.Model))},
+                lens = ${escape(normalize(metadata?.LensModel))},
+                focal_length = ${normalize(metadata?.FocalLength) || 'NULL'},
+                aperture = ${normalize(metadata?.FNumber) || 'NULL'},
+                shutter_speed = ${normalize(metadata?.ExposureTime) || 'NULL'},
+                iso = ${normalize(metadata?.ISO) || 'NULL'},
+                latitude = ${normalize(metadata?.latitude) || 'NULL'},
+                longitude = ${normalize(metadata?.longitude) || 'NULL'},
+                altitude = ${normalize(metadata?.GPSAltitude) || 'NULL'},
+                metadata = ${escape(JSON.stringify(metadata))},
+                updated_at = ${escape(new Date().toISOString())}
+              WHERE key = ${escape(key)}`;
+          } else {
+            // Video metadata
+            updateSql = `
+              UPDATE media SET
+                date_taken = ${escape(normalize(metadata?.creation_time))},
+                metadata = ${escape(JSON.stringify(metadata))},
+                updated_at = ${escape(new Date().toISOString())}
+              WHERE key = ${escape(key)}`;
+          }
 
           exifUpdates.push(updateSql);
         }
@@ -111,14 +125,14 @@ async function main() {
       }
     }
 
-    // Execute all database updates atomically (EXIF updates + cleanup)
+    // Execute all database updates atomically (metadata updates + cleanup)
     if (completed.length > 0 || exifUpdates.length > 0) {
       console.log(`\nUpdating database...`);
       const sqlStatements = [];
 
-      // Add EXIF updates
+      // Add metadata updates (EXIF for images, video metadata for videos)
       if (exifUpdates.length > 0) {
-        console.log(`  - ${exifUpdates.length} EXIF metadata updates`);
+        console.log(`  - ${exifUpdates.length} metadata updates`);
         sqlStatements.push(...exifUpdates);
       }
 

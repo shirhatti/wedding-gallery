@@ -38,6 +38,41 @@ export async function uploadToR2(worker, key, buffer, contentType = 'image/webp'
 }
 
 /**
+ * Extract metadata from video file (creation time, etc.)
+ */
+export async function extractVideoMetadata(videoBuffer) {
+  const tempVideoPath = join(tmpdir(), `probe-${Date.now()}.mp4`);
+
+  try {
+    await writeFile(tempVideoPath, videoBuffer);
+
+    return new Promise((resolve, reject) => {
+      ffmpeg.ffprobe(tempVideoPath, async (err, metadata) => {
+        // Clean up temp file
+        await unlink(tempVideoPath).catch(() => {});
+
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        // Extract creation time from format tags (works for QuickTime/MP4)
+        const creationTime = metadata.format.tags?.creation_time;
+
+        resolve({
+          creation_time: creationTime || null,
+          duration: metadata.format.duration || 0,
+          metadata: metadata
+        });
+      });
+    });
+  } catch (error) {
+    await unlink(tempVideoPath).catch(() => {});
+    throw error;
+  }
+}
+
+/**
  * Extract a frame from a video file as a thumbnail
  */
 export async function extractVideoThumbnail(videoBuffer) {
