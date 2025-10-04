@@ -65,7 +65,7 @@ export default {
       } else if (url.pathname.startsWith("/api/file/")) {
         return handleGetFile(url, env, corsHeaders, request);
       } else if (url.pathname.startsWith("/api/thumbnail/")) {
-        return handleGetThumbnail(url, env, corsHeaders);
+        return handleGetThumbnail(url, env, corsHeaders, request);
       } else if (url.pathname.startsWith("/api/hls/")) {
         return handleGetHLS(url, env, corsHeaders);
       }
@@ -239,7 +239,7 @@ export default {
   }
 
   // Get thumbnail from R2
-  async function handleGetThumbnail(url: URL, env: Env, corsHeaders: Record<string, string>): Promise<Response> {
+  async function handleGetThumbnail(url: URL, env: Env, corsHeaders: Record<string, string>, request: Request): Promise<Response> {
     const key = decodeURIComponent(url.pathname.replace("/api/thumbnail/", ""));
     const size = url.searchParams.get("size") || "medium";
 
@@ -254,6 +254,28 @@ export default {
       const prefix = sizeMap[size] || sizeMap.medium;
       const thumbnailKey = `${prefix}/${key}`;
 
+      // Check If-None-Match for ETag validation - use HEAD request for efficiency
+      const ifNoneMatch = request.headers.get("If-None-Match");
+
+      // First, get just the metadata with HEAD
+      const head = await env.R2_BUCKET.head(thumbnailKey);
+
+      if (!head) {
+        return new Response("Thumbnail not found", { status: 404 });
+      }
+
+      // Return 304 if ETag matches (avoids fetching body)
+      if (ifNoneMatch && ifNoneMatch === head.httpEtag) {
+        return new Response(null, {
+          status: 304,
+          headers: {
+            "etag": head.httpEtag,
+            "Cache-Control": "public, max-age=2592000"
+          }
+        });
+      }
+
+      // ETag doesn't match or not provided, fetch the full object
       const object = await env.R2_BUCKET.get(thumbnailKey);
 
       if (!object) {
