@@ -1,0 +1,58 @@
+# Repository settings managed by Probot Settings app
+# https://github.com/apps/settings
+
+repository:
+  name: wedding-gallery
+  description: Wedding photo gallery with HLS video support
+  private: false
+  has_issues: true
+  has_projects: false
+  has_wiki: false
+  has_downloads: true
+
+branches:
+  - name: main
+    protection:
+      # Require status checks to pass before merging
+      required_status_checks:
+        strict: true
+        contexts:
+          - "test"
+
+      # Do not require pull request reviews (single developer)
+      required_pull_request_reviews: null
+
+      # Do not enforce on admins (you can still force push if needed)
+      enforce_admins: false
+
+      # No restrictions on who can push
+      restrictions: null
+
+      # Allow force pushes (disabled by default)
+      allow_force_pushes: false
+
+      # Allow deletions (disabled by default)
+      allow_deletions: false
+
+  - name: release
+    protection:
+      # Require status checks to pass before merging
+      required_status_checks:
+        strict: true
+        contexts:
+          - "test"
+
+      # No pull request reviews required
+      required_pull_request_reviews: null
+
+      # Do not enforce on admins
+      enforce_admins: false
+
+      # No restrictions
+      restrictions: null
+
+      # No force pushes to release
+      allow_force_pushes: false
+
+      # No deletions
+      allow_deletions: false
