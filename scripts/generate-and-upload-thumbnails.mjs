@@ -60,9 +60,9 @@ async function main() {
       if (!FORCE_REGENERATE && existingSet.has(key)) {
         skipped++;
         if (DRY_RUN) {
-          console.log(`[${toGenerate + skipped + failed + 1}/${images.length}] ⏭️  ${key} (thumbnails exist)`);
+          console.log(`[${toGenerate + skipped + failed + 1}/${media.length}] ⏭️  ${key} (thumbnails exist)`);
         } else {
-          console.log(`[${toGenerate + skipped + failed + 1}/${images.length}] Skipping ${key} (thumbnails exist)`);
+          console.log(`[${toGenerate + skipped + failed + 1}/${media.length}] Skipping ${key} (thumbnails exist)`);
         }
         continue;
       }
