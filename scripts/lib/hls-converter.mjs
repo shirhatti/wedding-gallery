@@ -91,10 +91,24 @@ function selectQualityPresets(sourceWidth, sourceHeight) {
   const sourceResolution = sourceHeight;
 
   // Only generate qualities equal to or lower than source
-  return HLS_PRESETS.filter(preset => {
+  const selected = HLS_PRESETS.filter(preset => {
     const targetHeight = parseInt(preset.resolution.split('x')[1]);
     return targetHeight <= sourceResolution;
   });
+
+  // If no presets match (video is very low res), create a preset for the source resolution
+  if (selected.length === 0) {
+    return [{
+      name: `${sourceHeight}p`,
+      resolution: `${sourceWidth}x${sourceHeight}`,
+      videoBitrate: '800k',
+      audioBitrate: '96k',
+      maxrate: '856k',
+      bufsize: '1200k'
+    }];
+  }
+
+  return selected;
 }
 
 /**
@@ -104,8 +118,9 @@ async function convertToHLSQuality(videoPath, outputDir, preset) {
   return new Promise((resolve, reject) => {
     const playlistName = `${preset.name}.m3u8`;
     const segmentPattern = `${preset.name}_%03d.ts`;
+    let stderrOutput = '';
 
-    ffmpeg(videoPath)
+    const command = ffmpeg(videoPath)
       .outputOptions([
         '-c:v libx264',           // Video codec
         '-c:a aac',               // Audio codec
@@ -125,8 +140,15 @@ async function convertToHLSQuality(videoPath, outputDir, preset) {
       ])
       .output(join(outputDir, playlistName))
       .on('end', () => resolve())
-      .on('error', (err) => reject(err))
-      .run();
+      .on('error', (err, stdout, stderr) => {
+        console.error('  ffmpeg stderr:', stderr);
+        reject(new Error(`ffmpeg error: ${err.message}`));
+      })
+      .on('stderr', (stderrLine) => {
+        stderrOutput += stderrLine + '\n';
+      });
+
+    command.run();
   });
 }
 
