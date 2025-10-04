@@ -279,13 +279,18 @@
             // Reset successful upload counter
             window.successfulUploads = 0;
 
-            for (const file of files) {
+            // Filter valid files
+            const validFiles = files.filter(file => {
                 if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
-                    await uploadPhoto(file);
+                    return true;
                 } else {
                     console.warn(`⚠️ Skipping unsupported file: ${file.name}`);
+                    return false;
                 }
-            }
+            });
+
+            // Upload files with concurrency limit
+            await uploadWithConcurrency(validFiles, 3);
 
             // Show interstitial if any uploads were successful
             if (window.successfulUploads > 0) {
@@ -296,6 +301,29 @@
 
             // Reset input to allow same file selection again
             fileInput.value = '';
+        }
+
+        async function uploadWithConcurrency(files, limit) {
+            const queue = [...files];
+            const active = [];
+
+            while (queue.length > 0 || active.length > 0) {
+                // Fill up to the concurrency limit
+                while (active.length < limit && queue.length > 0) {
+                    const file = queue.shift();
+                    const promise = uploadPhoto(file).then(() => {
+                        // Remove from active when done
+                        const index = active.indexOf(promise);
+                        if (index > -1) active.splice(index, 1);
+                    });
+                    active.push(promise);
+                }
+
+                // Wait for at least one to complete
+                if (active.length > 0) {
+                    await Promise.race(active);
+                }
+            }
         }
 
         async function uploadPhoto(file) {
@@ -310,11 +338,17 @@
             formData.append('files[]', file);
 
             try {
-                // Upload to server
+                // Upload with timeout (60 seconds for large files)
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 60000);
+
                 const response = await fetch('/upload', {
                     method: 'POST',
-                    body: formData
+                    body: formData,
+                    signal: controller.signal
                 });
+
+                clearTimeout(timeoutId);
 
                 const result = await response.json();
 
@@ -331,7 +365,12 @@
 
             } catch (error) {
                 updateStatus(photoItem, 'error', '❌');
-                console.error(`❌ Upload error for ${file.name}:`, error);
+
+                if (error.name === 'AbortError') {
+                    console.error(`⏱️ Upload timeout for ${file.name}`);
+                } else {
+                    console.error(`❌ Upload error for ${file.name}:`, error);
+                }
             }
         }
 
@@ -339,31 +378,24 @@
             const photoItem = document.createElement('div');
             photoItem.className = 'photo-item';
 
-            // Create appropriate media element based on file type
+            // Create lightweight placeholder instead of blob URL to save memory
+            const placeholder = document.createElement('div');
+            placeholder.style.width = '100%';
+            placeholder.style.height = '100%';
+            placeholder.style.display = 'flex';
+            placeholder.style.alignItems = 'center';
+            placeholder.style.justifyContent = 'center';
+            placeholder.style.background = '#f0f5f3';
+            placeholder.style.fontSize = '2em';
+
+            // Use different icons for video vs image
             if (file.type.startsWith('video/')) {
-                const video = document.createElement('video');
-                video.src = URL.createObjectURL(file);
-                video.alt = `Preview of ${file.name}`;
-                video.muted = true;
-                video.playsInline = true;
-                video.style.width = '100%';
-                video.style.height = '100%';
-                video.style.objectFit = 'cover';
-
-                // Clean up object URL when video loads
-                video.onloadeddata = () => URL.revokeObjectURL(video.src);
-
-                photoItem.appendChild(video);
+                placeholder.textContent = '🎥';
             } else {
-                const img = document.createElement('img');
-                img.src = URL.createObjectURL(file);
-                img.alt = `Preview of ${file.name}`;
-
-                // Clean up object URL when image loads to prevent memory leaks
-                img.onload = () => URL.revokeObjectURL(img.src);
-
-                photoItem.appendChild(img);
+                placeholder.textContent = '📷';
             }
+
+            photoItem.appendChild(placeholder);
 
             // Create status indicator
             const status = document.createElement('div');
