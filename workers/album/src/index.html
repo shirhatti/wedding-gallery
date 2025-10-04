@@ -366,11 +366,10 @@
             const formData = new FormData();
             formData.append('files[]', file);
 
-            try {
-                // Upload with timeout for large files
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
 
+            try {
                 const response = await fetch('/upload', {
                     method: 'POST',
                     body: formData,
@@ -387,17 +386,22 @@
 
                     // Track successful uploads
                     window.successfulUploads = (window.successfulUploads || 0) + 1;
+
+                    // Clean up file reference to prevent memory leak
+                    delete photoItem._file;
                 } else {
-                    updateStatus(photoItem, 'error', '❌');
+                    updateStatus(photoItem, 'error', '❌', 'Server error');
                     console.error(`❌ Upload failed for ${file.name}:`, result);
                 }
 
             } catch (error) {
-                updateStatus(photoItem, 'error', '❌');
+                clearTimeout(timeoutId);
 
                 if (error.name === 'AbortError') {
+                    updateStatus(photoItem, 'error', '❌', 'Upload timeout');
                     console.error(`⏱️ Upload timeout for ${file.name}`);
                 } else {
+                    updateStatus(photoItem, 'error', '❌', 'Network error');
                     console.error(`❌ Upload error for ${file.name}:`, error);
                 }
             }
@@ -436,14 +440,20 @@
             return photoItem;
         }
 
-        function updateStatus(photoItem, className, emoji) {
+        function updateStatus(photoItem, className, emoji, errorMessage = null) {
             const status = photoItem.querySelector('.upload-status');
             status.className = `upload-status ${className}`;
             status.textContent = emoji;
 
-            // Update accessibility label
-            const statusText = className === 'success' ? 'Upload successful' : 'Upload failed';
-            status.setAttribute('aria-label', statusText);
+            // Update accessibility label and add error message tooltip
+            if (className === 'success') {
+                status.setAttribute('aria-label', 'Upload successful');
+                status.removeAttribute('title');
+            } else {
+                const statusText = errorMessage || 'Upload failed';
+                status.setAttribute('aria-label', statusText);
+                status.setAttribute('title', statusText); // Show error on hover
+            }
 
             // Add subtle animation feedback
             status.style.transform = 'scale(1.2)';
@@ -471,6 +481,10 @@
         async function retryUpload(photoItem) {
             if (!photoItem._file) return;
 
+            // Prevent concurrent retries (race condition)
+            if (photoItem._uploading) return;
+            photoItem._uploading = true;
+
             // Remove retry button
             const retryBtn = photoItem.querySelector('.retry-btn');
             if (retryBtn) retryBtn.remove();
@@ -485,11 +499,10 @@
             const formData = new FormData();
             formData.append('files[]', photoItem._file);
 
-            try {
-                // Upload with timeout
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
 
+            try {
                 const response = await fetch('/upload', {
                     method: 'POST',
                     body: formData,
@@ -506,17 +519,25 @@
 
                     // Track successful uploads
                     window.successfulUploads = (window.successfulUploads || 0) + 1;
+
+                    // Clean up file reference to prevent memory leak
+                    delete photoItem._file;
+                    delete photoItem._uploading;
                 } else {
-                    updateStatus(photoItem, 'error', '❌');
+                    updateStatus(photoItem, 'error', '❌', 'Server error');
                     console.error(`❌ Retry failed for ${photoItem._file.name}:`, result);
+                    photoItem._uploading = false;
                 }
 
             } catch (error) {
-                updateStatus(photoItem, 'error', '❌');
+                clearTimeout(timeoutId);
+                photoItem._uploading = false;
 
                 if (error.name === 'AbortError') {
+                    updateStatus(photoItem, 'error', '❌', 'Upload timeout');
                     console.error(`⏱️ Retry timeout for ${photoItem._file.name}`);
                 } else {
+                    updateStatus(photoItem, 'error', '❌', 'Network error');
                     console.error(`❌ Retry error for ${photoItem._file.name}:`, error);
                 }
             }
