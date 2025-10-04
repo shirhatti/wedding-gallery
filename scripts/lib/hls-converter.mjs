@@ -8,6 +8,7 @@ import ffmpegPath from '@ffmpeg-installer/ffmpeg';
 import { writeFile, mkdir, readdir, readFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { execSync } from 'child_process';
 
 // Configure ffmpeg
 ffmpeg.setFfmpegPath(ffmpegPath.path);
@@ -203,22 +204,11 @@ export async function convertToHLS(videoBuffer) {
     // Create master playlist
     await createMasterPlaylist(outputDir, selectedPresets, metadata);
 
-    // Read all generated files
-    const files = await readdir(outputDir);
-    const hlsFiles = {};
-
-    for (const file of files) {
-      const filePath = join(outputDir, file);
-      const content = await readFile(filePath);
-      hlsFiles[file] = content;
-    }
-
-    // Clean up
+    // Clean up temp video file only (keep outputDir for upload)
     await rm(tempVideoPath).catch(() => {});
-    await rm(outputDir, { recursive: true }).catch(() => {});
 
     return {
-      files: hlsFiles,
+      outputDir,
       metadata,
       qualityLevels: selectedPresets.map(p => p.name)
     };
@@ -231,36 +221,21 @@ export async function convertToHLS(videoBuffer) {
 }
 
 /**
- * Upload HLS files to R2 under a video key prefix
+ * Upload HLS files to R2 under a video key prefix using wrangler CLI
  */
-export async function uploadHLSToR2(worker, videoKey, hlsFiles) {
-  const uploadPromises = [];
+export async function uploadHLSToR2(videoKey, outputDir) {
+  const files = await readdir(outputDir);
 
-  for (const [filename, buffer] of Object.entries(hlsFiles)) {
+  for (const filename of files) {
+    const localPath = join(outputDir, filename);
+    const r2Key = `hls/${videoKey}/${filename}`;
     const contentType = filename.endsWith('.m3u8')
       ? 'application/vnd.apple.mpegurl'
       : 'video/MP2T';
 
-    const r2Key = `hls/${videoKey}/${filename}`;
-
-    uploadPromises.push(
-      worker.fetch('http://localhost/upload', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          key: r2Key,
-          data: buffer.toString('base64'),
-          contentType
-        }),
-      }).then(resp => {
-        if (!resp.ok) {
-          throw new Error(`Failed to upload ${r2Key}`);
-        }
-      })
-    );
+    execSync(`npx wrangler r2 object put "wedding-photos/${r2Key}" --file="${localPath}" --content-type="${contentType}" --remote`, {
+      cwd: 'workers/viewer',
+      stdio: 'inherit'
+    });
   }
-
-  await Promise.all(uploadPromises);
 }

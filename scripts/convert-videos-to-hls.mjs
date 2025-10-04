@@ -5,6 +5,7 @@
 
 import { unstable_dev } from 'wrangler';
 import { execSync } from 'child_process';
+import { rm } from 'fs/promises';
 import { convertToHLS, uploadHLSToR2 } from './lib/hls-converter.mjs';
 
 const DRY_RUN = !process.argv.includes('--convert');
@@ -80,6 +81,7 @@ async function main() {
         continue;
       }
 
+      let outputDir;
       try {
         console.log(`[${toConvert + skipped + failed + 1}/${videos.length}] Converting ${key} to HLS...`);
 
@@ -93,17 +95,23 @@ async function main() {
         const buffer = Buffer.from(arrayBuffer);
 
         // Convert to HLS
-        const { files: hlsFiles, qualityLevels } = await convertToHLS(buffer);
+        const { outputDir: hlsOutputDir, qualityLevels } = await convertToHLS(buffer);
+        outputDir = hlsOutputDir;
 
-        // Upload HLS files to R2
-        console.log(`  Uploading ${Object.keys(hlsFiles).length} HLS files to R2...`);
-        await uploadHLSToR2(worker, key, hlsFiles);
+        // Upload HLS files to R2 using wrangler CLI
+        console.log(`  Uploading HLS files to R2...`);
+        await uploadHLSToR2(key, outputDir);
 
         toConvert++;
         console.log(`  ✓ Converted to HLS (${qualityLevels.join(', ')})`);
       } catch (error) {
         console.error(`  ✗ Failed: ${error.message}`);
         failed++;
+      } finally {
+        // Clean up temp directory
+        if (outputDir) {
+          await rm(outputDir, { recursive: true }).catch(() => {});
+        }
       }
     }
 
