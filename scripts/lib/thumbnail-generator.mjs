@@ -48,14 +48,14 @@ export async function extractVideoThumbnail(videoBuffer) {
   try {
     await writeFile(tempVideoPath, videoBuffer);
 
-    // Extract frame at 1 second (or 10% through the video, whichever is earlier)
+    // Extract frame at 1 second (preserving original aspect ratio)
     await new Promise((resolve, reject) => {
       ffmpeg(tempVideoPath)
         .screenshots({
           timestamps: ['1'],
           filename: tempImagePath.split('/').pop(),
           folder: tmpdir(),
-          size: '1920x1080'
+          size: '1920x?' // Preserve aspect ratio, max width 1920px
         })
         .on('end', resolve)
         .on('error', reject);
