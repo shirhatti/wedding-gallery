@@ -20,19 +20,22 @@ branches:
         contexts:
           - "test"
 
-      # Do not require pull request reviews (single developer)
+      # Require linear history (fast-forward only)
+      required_linear_history: true
+
+      # No PR reviews required on main (single developer)
       required_pull_request_reviews: null
 
-      # Do not enforce on admins (you can still force push if needed)
-      enforce_admins: false
+      # Enforce on admins (prevents accidental pushes, use break glass if needed)
+      enforce_admins: true
 
       # No restrictions on who can push
       restrictions: null
 
-      # Allow force pushes (disabled by default)
+      # No force pushes
       allow_force_pushes: false
 
-      # Allow deletions (disabled by default)
+      # No deletions
       allow_deletions: false
 
   - name: release
@@ -43,11 +46,17 @@ branches:
         contexts:
           - "test"
 
-      # No pull request reviews required
-      required_pull_request_reviews: null
+      # Require linear history (fast-forward only)
+      required_linear_history: true
 
-      # Do not enforce on admins
-      enforce_admins: false
+      # Require PRs to release (no direct pushes)
+      required_pull_request_reviews:
+        required_approving_review_count: 1
+        dismiss_stale_reviews: false
+        require_code_owner_reviews: false
+
+      # Enforce on admins (prevents accidental pushes, use break glass if needed)
+      enforce_admins: true
 
       # No restrictions
       restrictions: null
