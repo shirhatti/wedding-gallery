@@ -5,13 +5,15 @@
 
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from '@ffmpeg-installer/ffmpeg';
+import ffprobePath from '@ffprobe-installer/ffprobe';
 import { writeFile, mkdir, readdir, readFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { execSync } from 'child_process';
 
-// Configure ffmpeg
+// Configure ffmpeg and ffprobe
 ffmpeg.setFfmpegPath(ffmpegPath.path);
+ffmpeg.setFfprobePath(ffprobePath.path);
 
 /**
  * HLS quality presets for adaptive streaming
