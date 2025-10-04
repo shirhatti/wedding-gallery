@@ -22,6 +22,7 @@
     "@cloudflare/workers-types": "^4.20251001.0",
     "@eslint/js": "^9.36.0",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffprobe-installer/ffprobe": "^2.1.2",
     "@types/better-sqlite3": "^7.6.13",
     "@typescript-eslint/eslint-plugin": "^8.45.0",
     "@typescript-eslint/parser": "^8.45.0",
@@ -35,14 +36,11 @@
     "sharp": "^0.34.4",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4",
-    "wrangler": "^4.41.0"
+    "wrangler": "^4.42.0"
   },
   "lint-staged": {
     "*.{js,ts,tsx}": [
       "eslint --fix"
     ]
-  },
-  "dependencies": {
-    "@ffprobe-installer/ffprobe": "^2.1.2"
   }
 }
