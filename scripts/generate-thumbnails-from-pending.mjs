@@ -41,6 +41,7 @@ async function main() {
     let generated = 0;
     let failed = 0;
     const completed = [];
+    const exifUpdates = [];
 
     for (const row of pending) {
       const key = row.key;
@@ -65,7 +66,7 @@ async function main() {
           exif = await extractExifMetadata(buffer);
         }
 
-        // Update media table with EXIF if found
+        // Collect EXIF update SQL for batch execution later
         if (exif) {
           const normalize = (val) => {
             if (val === null || val === undefined) return null;
@@ -90,14 +91,9 @@ async function main() {
               altitude = ${normalize(exif?.GPSAltitude) || 'NULL'},
               metadata = ${escape(JSON.stringify(exif))},
               updated_at = ${escape(new Date().toISOString())}
-            WHERE key = ${escape(key)};
-          `;
+            WHERE key = ${escape(key)}`;
 
-          writeFileSync('/tmp/exif-update.sql', updateSql);
-          execSync('npx wrangler d1 execute wedding-photos-metadata --file=/tmp/exif-update.sql --remote', {
-            cwd: 'workers/viewer',
-            stdio: 'inherit'
-          });
+          exifUpdates.push(updateSql);
         }
 
         // Generate thumbnails (handles both images and videos)
@@ -115,19 +111,34 @@ async function main() {
       }
     }
 
-    // Remove completed items from pending_thumbnails
-    if (completed.length > 0) {
-      console.log(`\nRemoving ${completed.length} completed items from pending table...`);
-      const deleteSql = completed.map(key =>
-        `DELETE FROM pending_thumbnails WHERE key = '${key.replace(/'/g, "''")}'`
-      ).join(';\n') + ';';
+    // Execute all database updates atomically (EXIF updates + cleanup)
+    if (completed.length > 0 || exifUpdates.length > 0) {
+      console.log(`\nUpdating database...`);
+      const sqlStatements = [];
 
-      writeFileSync('/tmp/cleanup.sql', deleteSql);
-      execSync('npx wrangler d1 execute wedding-photos-metadata --file=/tmp/cleanup.sql --remote', {
+      // Add EXIF updates
+      if (exifUpdates.length > 0) {
+        console.log(`  - ${exifUpdates.length} EXIF metadata updates`);
+        sqlStatements.push(...exifUpdates);
+      }
+
+      // Add pending_thumbnails cleanup
+      if (completed.length > 0) {
+        console.log(`  - Removing ${completed.length} items from pending table`);
+        const deleteSql = completed.map(key =>
+          `DELETE FROM pending_thumbnails WHERE key = '${key.replace(/'/g, "''")}'`
+        );
+        sqlStatements.push(...deleteSql);
+      }
+
+      // Execute all statements in a single transaction
+      const batchSql = sqlStatements.join(';\n') + ';';
+      writeFileSync('/tmp/batch-update.sql', batchSql);
+      execSync('npx wrangler d1 execute wedding-photos-metadata --file=/tmp/batch-update.sql --remote --yes', {
         cwd: 'workers/viewer',
         stdio: 'inherit'
       });
-      console.log('  ✓ Cleaned up pending table');
+      console.log('  ✓ Database updated');
     }
 
     console.log(`\nDone!`);
