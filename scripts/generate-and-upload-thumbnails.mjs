@@ -5,6 +5,7 @@
 
 import Database from 'better-sqlite3';
 import { unstable_dev } from 'wrangler';
+import { execSync } from 'child_process';
 import { generateThumbnails, uploadThumbnails } from './lib/thumbnail-generator.mjs';
 
 const DB_PATH = './wedding-photos-metadata.db';
@@ -112,6 +113,17 @@ async function main() {
       console.log(`Generated: ${toGenerate}`);
       console.log(`Skipped: ${skipped}`);
       console.log(`Failed: ${failed}`);
+
+      // Invalidate thumbnail cache if forced regeneration
+      if (FORCE_REGENERATE && toGenerate > 0) {
+        console.log('\n🔄 Invalidating thumbnail cache...');
+        const newVersion = Date.now().toString();
+        execSync(`npx wrangler kv key put --binding=CACHE_VERSION "thumbnail_version" "${newVersion}" --remote`, {
+          cwd: 'workers/viewer',
+          stdio: 'inherit'
+        });
+        console.log(`  ✓ Cache version updated to ${newVersion}`);
+      }
     }
 
   } finally {

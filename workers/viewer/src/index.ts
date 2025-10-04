@@ -4,6 +4,7 @@ import { handleGetFile } from "./handlers/media";
 interface Env {
   R2_BUCKET: R2Bucket;
   DB: D1Database;
+  CACHE_VERSION: KVNamespace;
   GALLERY_PASSWORD?: string; // Simple password for gallery access
 }
 
@@ -22,6 +23,18 @@ export default {
       // Handle CORS preflight
       if (request.method === "OPTIONS") {
         return new Response(null, { headers: corsHeaders });
+      }
+
+      // Cache version endpoint (public, no auth required)
+      if (url.pathname === "/api/cache-version") {
+        const version = await env.CACHE_VERSION.get("thumbnail_version") || Date.now().toString();
+        return new Response(JSON.stringify({ version }), {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache"
+          }
+        });
       }
 
       // Login page and authentication

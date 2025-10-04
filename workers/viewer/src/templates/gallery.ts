@@ -363,11 +363,17 @@ export function getJavaScript() {
     let currentIndex = 0;
     let lightboxModal = null;
     let hlsInstance = null;
+    let cacheVersion = '';
     const isMobile = window.matchMedia('(max-width: 768px)').matches;
-    
+
     // Load media from API
     async function loadMedia() {
         try {
+            // Fetch cache version for thumbnail URLs
+            const versionResponse = await fetch('/api/cache-version');
+            const versionData = await versionResponse.json();
+            cacheVersion = versionData.version;
+
             const response = await fetch('/api/media');
             const data = await response.json();
             mediaItems = data.media;
@@ -401,13 +407,13 @@ export function getJavaScript() {
             if (isVideo) {
                 // Use thumbnail for videos in grid view instead of loading full video
                 return '<div class="gallery-item" data-index="' + dataIndex + '" ' + onclickAttr + '>' +
-                    '<img class="media-lazy" data-src="/api/thumbnail/' + item.key + '?size=medium" alt="' + item.name + '" loading="lazy">' +
+                    '<img class="media-lazy" data-src="/api/thumbnail/' + item.key + '?size=medium&v=' + cacheVersion + '" alt="' + item.name + '" loading="lazy">' +
                     '<div class="play-overlay"></div>' +
                     '<div class="video-indicator">📹 Video</div>' +
                     '</div>';
             } else {
                 return '<div class="gallery-item" data-index="' + dataIndex + '" ' + onclickAttr + '>' +
-                    '<img class="media-lazy" data-src="/api/thumbnail/' + item.key + '?size=medium" alt="' + item.name + '" loading="lazy">' +
+                    '<img class="media-lazy" data-src="/api/thumbnail/' + item.key + '?size=medium&v=' + cacheVersion + '" alt="' + item.name + '" loading="lazy">' +
                     '</div>';
             }
         }).join('');
