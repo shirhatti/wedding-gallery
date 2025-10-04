@@ -1,0 +1,29 @@
+name: Convert Videos to HLS
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC (less frequent than thumbnails since videos are larger)
+    - cron: '0 2 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    name: Convert videos to HLS format
+    timeout-minutes: 60 # Longer timeout for video processing
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Convert videos to HLS
+        run: node scripts/convert-videos-to-hls.mjs --convert
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: f974b5257387abc8b6e9e66734f27ec3
