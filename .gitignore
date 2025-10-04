@@ -30,3 +30,6 @@ dist/
 
 # Claude settings (may contain secrets)
 .claude/settings.local.json
+
+# Debug/temporary scripts
+scripts/debug/
