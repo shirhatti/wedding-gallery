@@ -1,4 +1,8 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
+# Run tests
+npm test -- --run
+
+# Run linter on staged files
 npx lint-staged
