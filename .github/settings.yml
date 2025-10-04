@@ -1,5 +1,6 @@
 # Repository settings managed by Probot Settings app
 # https://github.com/apps/settings
+# The app syncs settings automatically on push to this file
 
 repository:
   name: wedding-gallery
