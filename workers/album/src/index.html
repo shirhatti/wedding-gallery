@@ -88,6 +88,16 @@
             object-fit: cover;
         }
 
+        .photo-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f0f5f3;
+            font-size: 2em;
+        }
+
         .upload-status {
             position: absolute;
             top: 5px;
@@ -101,6 +111,28 @@
 
         .success { background: #26473e !important; }
         .error { background: #dc3545 !important; }
+
+        .retry-btn {
+            position: absolute;
+            bottom: 5px;
+            right: 5px;
+            background: #26473e;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .retry-btn:hover {
+            background: #1a332c;
+        }
+
+        .retry-btn:active {
+            transform: scale(0.95);
+        }
 
         .interstitial {
             position: fixed;
@@ -231,6 +263,10 @@
          * Handles file selection, drag & drop, and uploads
          */
 
+        // Configuration constants
+        const MAX_CONCURRENT_UPLOADS = 3;
+        const UPLOAD_TIMEOUT_MS = 60000; // 60 seconds
+
         const fileInput = document.getElementById('fileInput');
         const uploadArea = document.querySelector('.upload-area');
         const photoGrid = document.getElementById('photoGrid');
@@ -290,7 +326,7 @@
             });
 
             // Upload files with concurrency limit
-            await uploadWithConcurrency(validFiles, 3);
+            await uploadWithConcurrency(validFiles, MAX_CONCURRENT_UPLOADS);
 
             // Show interstitial if any uploads were successful
             if (window.successfulUploads > 0) {
@@ -304,26 +340,18 @@
         }
 
         async function uploadWithConcurrency(files, limit) {
-            const queue = [...files];
-            const active = [];
+            const executing = new Set();
 
-            while (queue.length > 0 || active.length > 0) {
-                // Fill up to the concurrency limit
-                while (active.length < limit && queue.length > 0) {
-                    const file = queue.shift();
-                    const promise = uploadPhoto(file).then(() => {
-                        // Remove from active when done
-                        const index = active.indexOf(promise);
-                        if (index > -1) active.splice(index, 1);
-                    });
-                    active.push(promise);
-                }
+            for (const file of files) {
+                const promise = uploadPhoto(file).finally(() => executing.delete(promise));
+                executing.add(promise);
 
-                // Wait for at least one to complete
-                if (active.length > 0) {
-                    await Promise.race(active);
+                if (executing.size >= limit) {
+                    await Promise.race(executing);
                 }
             }
+
+            await Promise.allSettled(executing);
         }
 
         async function uploadPhoto(file) {
@@ -331,6 +359,7 @@
 
             // Create photo preview immediately
             const photoItem = createPhotoPreview(file);
+            photoItem._file = file; // Store file reference for retry
             photoGrid.appendChild(photoItem);
 
             // Prepare upload data
@@ -338,9 +367,9 @@
             formData.append('files[]', file);
 
             try {
-                // Upload with timeout (60 seconds for large files)
+                // Upload with timeout for large files
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 60000);
+                const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
 
                 const response = await fetch('/upload', {
                     method: 'POST',
@@ -380,19 +409,18 @@
 
             // Create lightweight placeholder instead of blob URL to save memory
             const placeholder = document.createElement('div');
-            placeholder.style.width = '100%';
-            placeholder.style.height = '100%';
-            placeholder.style.display = 'flex';
-            placeholder.style.alignItems = 'center';
-            placeholder.style.justifyContent = 'center';
-            placeholder.style.background = '#f0f5f3';
-            placeholder.style.fontSize = '2em';
+            placeholder.className = 'photo-placeholder';
 
             // Use different icons for video vs image
-            if (file.type.startsWith('video/')) {
+            const isVideo = file.type.startsWith('video/');
+            if (isVideo) {
                 placeholder.textContent = '🎥';
+                placeholder.setAttribute('role', 'img');
+                placeholder.setAttribute('aria-label', `Video: ${file.name}, uploading`);
             } else {
                 placeholder.textContent = '📷';
+                placeholder.setAttribute('role', 'img');
+                placeholder.setAttribute('aria-label', `Photo: ${file.name}, uploading`);
             }
 
             photoItem.appendChild(placeholder);
@@ -424,6 +452,74 @@
             setTimeout(() => {
                 status.style.transform = 'scale(1)';
             }, 300);
+
+            // Add retry button for failed uploads
+            if (className === 'error' && photoItem._file) {
+                // Remove existing retry button if any
+                const existingRetry = photoItem.querySelector('.retry-btn');
+                if (existingRetry) existingRetry.remove();
+
+                const retryBtn = document.createElement('button');
+                retryBtn.className = 'retry-btn';
+                retryBtn.textContent = '🔄 Retry';
+                retryBtn.setAttribute('aria-label', `Retry upload for ${photoItem._file.name}`);
+                retryBtn.onclick = () => retryUpload(photoItem);
+                photoItem.appendChild(retryBtn);
+            }
+        }
+
+        async function retryUpload(photoItem) {
+            if (!photoItem._file) return;
+
+            // Remove retry button
+            const retryBtn = photoItem.querySelector('.retry-btn');
+            if (retryBtn) retryBtn.remove();
+
+            // Reset status to uploading
+            const status = photoItem.querySelector('.upload-status');
+            status.className = 'upload-status';
+            status.textContent = '⏳';
+            status.setAttribute('aria-label', 'Upload in progress');
+
+            // Prepare upload data
+            const formData = new FormData();
+            formData.append('files[]', photoItem._file);
+
+            try {
+                // Upload with timeout
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData,
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    updateStatus(photoItem, 'success', '✅');
+                    console.log(`✅ Retry successful: ${result.fileName}`);
+
+                    // Track successful uploads
+                    window.successfulUploads = (window.successfulUploads || 0) + 1;
+                } else {
+                    updateStatus(photoItem, 'error', '❌');
+                    console.error(`❌ Retry failed for ${photoItem._file.name}:`, result);
+                }
+
+            } catch (error) {
+                updateStatus(photoItem, 'error', '❌');
+
+                if (error.name === 'AbortError') {
+                    console.error(`⏱️ Retry timeout for ${photoItem._file.name}`);
+                } else {
+                    console.error(`❌ Retry error for ${photoItem._file.name}:`, error);
+                }
+            }
         }
 
         // Utility function to format file sizes (for debugging)
