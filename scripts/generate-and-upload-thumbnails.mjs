@@ -1,32 +1,15 @@
 /**
  * Generate thumbnails and upload them to R2
+ * Supports both images and videos
  */
 
 import Database from 'better-sqlite3';
-import sharp from 'sharp';
 import { unstable_dev } from 'wrangler';
+import { generateThumbnails, uploadThumbnails } from './lib/thumbnail-generator.mjs';
 
 const DB_PATH = './wedding-photos-metadata.db';
 const DRY_RUN = !process.argv.includes('--generate');
 const FORCE_REGENERATE = process.argv.includes('--force');
-
-async function uploadToR2(worker, key, buffer, contentType = 'image/webp') {
-  const resp = await worker.fetch('http://localhost/upload', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      key,
-      data: buffer.toString('base64'),
-      contentType
-    }),
-  });
-
-  if (!resp.ok) {
-    throw new Error(`Failed to upload ${key}`);
-  }
-}
 
 async function main() {
   console.log('Starting worker...');
@@ -48,13 +31,13 @@ async function main() {
   try {
     const db = new Database(DB_PATH);
 
-    // Get all images from database
-    const images = db.prepare(`
-      SELECT key FROM media
-      WHERE type = 'image'
+    // Get all media (images and videos) from database
+    const media = db.prepare(`
+      SELECT key, type FROM media
+      WHERE type IN ('image', 'video')
     `).all();
 
-    console.log(`Found ${images.length} images in database`);
+    console.log(`Found ${media.length} media items in database (images and videos)`);
 
     // List all existing thumbnails from R2 in one batch operation
     console.log('Fetching existing thumbnails from R2...');
@@ -63,14 +46,15 @@ async function main() {
     const existingSet = new Set(existingThumbs.map(k => k.replace('thumbnails/medium/', '')));
 
     console.log(`Found ${existingSet.size} existing thumbnails`);
-    console.log(`Checking ${images.length} images against existing thumbnails...\n`);
+    console.log(`Checking ${media.length} media items against existing thumbnails...\n`);
 
     let toGenerate = 0;
     let skipped = 0;
     let failed = 0;
 
-    for (const row of images) {
+    for (const row of media) {
       const key = row.key;
+      const mediaType = row.type;
 
       // Check if thumbnails already exist (unless force mode)
       if (!FORCE_REGENERATE && existingSet.has(key)) {
@@ -85,35 +69,29 @@ async function main() {
 
       if (DRY_RUN) {
         toGenerate++;
-        console.log(`[${toGenerate + skipped + failed + 1}/${images.length}] 📋 Would generate: ${key}`);
+        const typeIcon = mediaType === 'video' ? '🎬' : '📸';
+        console.log(`[${toGenerate + skipped + failed + 1}/${media.length}] 📋 Would generate: ${key} ${typeIcon}`);
         continue;
       }
 
       try {
-        console.log(`[${toGenerate + skipped + failed + 1}/${images.length}] Processing ${key}...`);
+        const typeIcon = mediaType === 'video' ? '🎬' : '📸';
+        console.log(`[${toGenerate + skipped + failed + 1}/${media.length}] Processing ${key} ${typeIcon}...`);
 
-        // Download full image from R2
-        const imageResp = await worker.fetch(`http://localhost/get-full?key=${encodeURIComponent(key)}`);
-        if (!imageResp.ok) {
-          throw new Error('Failed to fetch full image');
+        // Download full media file from R2
+        const mediaResp = await worker.fetch(`http://localhost/get-full?key=${encodeURIComponent(key)}`);
+        if (!mediaResp.ok) {
+          throw new Error('Failed to fetch full media file');
         }
 
-        const arrayBuffer = await imageResp.arrayBuffer();
+        const arrayBuffer = await mediaResp.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
 
-        // Generate thumbnails (rotate() auto-rotates based on EXIF orientation)
-        const [small, medium, large] = await Promise.all([
-          sharp(buffer).rotate().resize(150, 150, { fit: 'cover' }).webp({ quality: 80 }).toBuffer(),
-          sharp(buffer).rotate().resize(400, 400, { fit: 'cover' }).webp({ quality: 85 }).toBuffer(),
-          sharp(buffer).rotate().resize(800, 800, { fit: 'inside' }).webp({ quality: 90 }).toBuffer(),
-        ]);
+        // Generate thumbnails (handles both images and videos)
+        const thumbnails = await generateThumbnails(buffer, mediaType);
 
         // Upload thumbnails to R2
-        await Promise.all([
-          uploadToR2(worker, `thumbnails/small/${key}`, small),
-          uploadToR2(worker, `thumbnails/medium/${key}`, medium),
-          uploadToR2(worker, `thumbnails/large/${key}`, large),
-        ]);
+        await uploadThumbnails(worker, key, thumbnails);
 
         toGenerate++;
         console.log(`  ✓ Generated and uploaded thumbnails`);

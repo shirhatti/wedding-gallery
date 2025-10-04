@@ -66,6 +66,8 @@ export default {
         return handleGetFile(url, env, corsHeaders, request);
       } else if (url.pathname.startsWith("/api/thumbnail/")) {
         return handleGetThumbnail(url, env, corsHeaders);
+      } else if (url.pathname.startsWith("/api/hls/")) {
+        return handleGetHLS(url, env, corsHeaders);
       }
 
       return new Response("Not Found", { status: 404 });
@@ -267,6 +269,49 @@ export default {
       return new Response(object.body, { headers });
     } catch (_error) {
       return new Response("Failed to retrieve thumbnail", {
+        status: 500,
+        headers: corsHeaders
+      });
+    }
+  }
+
+  // Get HLS files (manifests and segments) from R2
+  async function handleGetHLS(url: URL, env: Env, corsHeaders: Record<string, string>): Promise<Response> {
+    // URL format: /api/hls/{videoKey}/{filename}
+    const pathParts = url.pathname.replace("/api/hls/", "").split("/");
+
+    if (pathParts.length < 2) {
+      return new Response("Invalid HLS path", { status: 400 });
+    }
+
+    const videoKey = decodeURIComponent(pathParts.slice(0, -1).join("/"));
+    const filename = decodeURIComponent(pathParts[pathParts.length - 1]);
+    const hlsKey = `hls/${videoKey}/${filename}`;
+
+    try {
+      const object = await env.R2_BUCKET.get(hlsKey);
+
+      if (!object) {
+        return new Response("HLS file not found", { status: 404 });
+      }
+
+      const headers = new Headers();
+      object.writeHttpMetadata(headers);
+
+      // Set appropriate content type
+      if (filename.endsWith(".m3u8")) {
+        headers.set("Content-Type", "application/vnd.apple.mpegurl");
+      } else if (filename.endsWith(".ts")) {
+        headers.set("Content-Type", "video/MP2T");
+      }
+
+      headers.set("Cache-Control", "public, max-age=2592000"); // Cache for 30 days
+      headers.set("etag", object.httpEtag);
+      Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
+
+      return new Response(object.body, { headers });
+    } catch (_error) {
+      return new Response("Failed to retrieve HLS file", {
         status: 500,
         headers: corsHeaders
       });

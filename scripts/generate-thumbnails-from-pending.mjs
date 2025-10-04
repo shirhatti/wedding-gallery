@@ -1,31 +1,13 @@
 /**
  * Generate thumbnails for pending items in D1
  * Also extracts and updates EXIF metadata for web-uploaded images
+ * Supports both images and videos
  */
 
-import sharp from 'sharp';
 import { unstable_dev } from 'wrangler';
 import { execSync } from 'child_process';
 import { writeFileSync } from 'fs';
-import exifr from 'exifr';
-
-async function uploadToR2(worker, key, buffer, contentType = 'image/webp') {
-  const resp = await worker.fetch('http://localhost/upload', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      key,
-      data: buffer.toString('base64'),
-      contentType
-    }),
-  });
-
-  if (!resp.ok) {
-    throw new Error(`Failed to upload ${key}`);
-  }
-}
+import { generateThumbnails, uploadThumbnails, extractExifMetadata } from './lib/thumbnail-generator.mjs';
 
 async function main() {
   console.log('Starting worker...');
@@ -37,9 +19,9 @@ async function main() {
   });
 
   try {
-    // Query pending thumbnails from D1
+    // Query pending thumbnails from D1 with media type
     console.log('Fetching pending thumbnails from D1...');
-    const result = execSync('npx wrangler d1 execute wedding-photos-metadata --command "SELECT key FROM pending_thumbnails ORDER BY created_at" --json --remote', {
+    const result = execSync('npx wrangler d1 execute wedding-photos-metadata --command "SELECT p.key, m.type FROM pending_thumbnails p JOIN media m ON p.key = m.key ORDER BY p.created_at" --json --remote', {
       cwd: 'workers/viewer',
       encoding: 'utf8',
       stdio: ['inherit', 'pipe', 'inherit']
@@ -62,29 +44,25 @@ async function main() {
 
     for (const row of pending) {
       const key = row.key;
+      const mediaType = row.type;
 
       try {
-        console.log(`[${generated + failed + 1}/${pending.length}] Processing ${key}...`);
+        const typeIcon = mediaType === 'video' ? '🎬' : '📸';
+        console.log(`[${generated + failed + 1}/${pending.length}] Processing ${key} ${typeIcon}...`);
 
-        // Download full image from R2
-        const imageResp = await worker.fetch(`http://localhost/get-full?key=${encodeURIComponent(key)}`);
-        if (!imageResp.ok) {
-          throw new Error('Failed to fetch full image');
+        // Download full media file from R2
+        const mediaResp = await worker.fetch(`http://localhost/get-full?key=${encodeURIComponent(key)}`);
+        if (!mediaResp.ok) {
+          throw new Error('Failed to fetch full media file');
         }
 
-        const arrayBuffer = await imageResp.arrayBuffer();
+        const arrayBuffer = await mediaResp.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
 
-        // Extract EXIF metadata
+        // Extract EXIF metadata (only for images, not videos)
         let exif = null;
-        try {
-          exif = await exifr.parse(buffer, {
-            pick: ['DateTimeOriginal', 'Make', 'Model', 'LensModel',
-                   'FocalLength', 'FNumber', 'ExposureTime', 'ISO',
-                   'latitude', 'longitude', 'GPSAltitude']
-          });
-        } catch (e) {
-          // No EXIF data
+        if (mediaType === 'image') {
+          exif = await extractExifMetadata(buffer);
         }
 
         // Update media table with EXIF if found
@@ -122,19 +100,11 @@ async function main() {
           });
         }
 
-        // Generate thumbnails (rotate() auto-rotates based on EXIF orientation)
-        const [small, medium, large] = await Promise.all([
-          sharp(buffer).rotate().resize(150, 150, { fit: 'cover' }).webp({ quality: 80 }).toBuffer(),
-          sharp(buffer).rotate().resize(400, 400, { fit: 'cover' }).webp({ quality: 85 }).toBuffer(),
-          sharp(buffer).rotate().resize(800, 800, { fit: 'inside' }).webp({ quality: 90 }).toBuffer(),
-        ]);
+        // Generate thumbnails (handles both images and videos)
+        const thumbnails = await generateThumbnails(buffer, mediaType);
 
         // Upload thumbnails to R2
-        await Promise.all([
-          uploadToR2(worker, `thumbnails/small/${key}`, small),
-          uploadToR2(worker, `thumbnails/medium/${key}`, medium),
-          uploadToR2(worker, `thumbnails/large/${key}`, large),
-        ]);
+        await uploadThumbnails(worker, key, thumbnails);
 
         generated++;
         completed.push(key);

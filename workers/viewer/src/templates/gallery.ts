@@ -40,6 +40,7 @@ export function getPageHTML() {
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script>
         ${getJavaScript()}
     </script>
@@ -328,18 +329,19 @@ export function getCSS() {
         align-items: center;
         justify-content: center;
         pointer-events: none;
+        opacity: 0.8;
         transition: opacity 0.3s;
     }
-    
+
     .play-overlay::after {
         content: '▶';
         color: white;
         font-size: 24px;
         margin-left: 4px;
     }
-    
+
     .gallery-item:hover .play-overlay {
-        opacity: 0.8;
+        opacity: 1;
     }
     
     /* Improved mobile scrolling performance */
@@ -360,6 +362,7 @@ export function getJavaScript() {
     let mediaItems = [];
     let currentIndex = 0;
     let lightboxModal = null;
+    let hlsInstance = null;
     const isMobile = window.matchMedia('(max-width: 768px)').matches;
     
     // Load media from API
@@ -394,12 +397,12 @@ export function getJavaScript() {
             const isVideo = item.type === 'video';
             const dataIndex = (index + 1) + '/' + mediaItems.length;
             const onclickAttr = !isMobile ? 'onclick="openLightbox(' + index + ')"' : '';
-            
+
             if (isVideo) {
+                // Use thumbnail for videos in grid view instead of loading full video
                 return '<div class="gallery-item" data-index="' + dataIndex + '" ' + onclickAttr + '>' +
-                    '<video class="media-lazy" data-src="/api/file/' + item.key + '" muted playsinline ' +
-                    (isMobile ? 'controls' : '') + ' preload="metadata"></video>' +
-                    (!isMobile ? '<div class="play-overlay"></div>' : '') +
+                    '<img class="media-lazy" data-src="/api/thumbnail/' + item.key + '?size=medium" alt="' + item.name + '" loading="lazy">' +
+                    '<div class="play-overlay"></div>' +
                     '<div class="video-indicator">📹 Video</div>' +
                     '</div>';
             } else {
@@ -413,34 +416,23 @@ export function getJavaScript() {
     // Setup lazy loading with Intersection Observer
     function setupLazyLoading() {
         const lazyMedia = document.querySelectorAll('.media-lazy');
-        
+
         const mediaObserver = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
-                    const media = entry.target;
-                    media.src = media.dataset.src;
-                    
-                    if (media.tagName === 'VIDEO') {
-                        media.load();
-                        // Auto-play muted videos on desktop when visible
-                        if (!isMobile) {
-                            media.addEventListener('loadeddata', () => {
-                                media.classList.add('loaded');
-                            });
-                        }
-                    } else {
-                        media.onload = () => media.classList.add('loaded');
-                    }
-                    
-                    media.classList.remove('media-lazy');
-                    mediaObserver.unobserve(media);
+                    const img = entry.target;
+                    img.src = img.dataset.src;
+                    img.onload = () => img.classList.add('loaded');
+
+                    img.classList.remove('media-lazy');
+                    mediaObserver.unobserve(img);
                 }
             });
         }, {
             rootMargin: isMobile ? '100px 0px' : '50px 0px',
             threshold: 0.01
         });
-        
+
         lazyMedia.forEach(media => mediaObserver.observe(media));
     }
     
@@ -495,22 +487,79 @@ export function getJavaScript() {
         if (video) {
             video.pause();
         }
+        // Clean up HLS instance
+        if (hlsInstance) {
+            hlsInstance.destroy();
+            hlsInstance = null;
+        }
         if (lightboxModal) {
             lightboxModal.hide();
         }
     }
     
     // Update lightbox media
-    function updateLightbox() {
+    async function updateLightbox() {
         const item = mediaItems[currentIndex];
         const img = document.getElementById('lightboxImage');
         const video = document.getElementById('lightboxVideo');
-        
+
+        // Clean up any existing HLS instance
+        if (hlsInstance) {
+            hlsInstance.destroy();
+            hlsInstance = null;
+        }
+
         if (item.type === 'video') {
             img.style.display = 'none';
             video.style.display = 'block';
-            video.src = '/api/file/' + item.key;
-            video.load();
+
+            // Try to load HLS version first
+            const hlsUrl = '/api/hls/' + item.key + '/master.m3u8';
+
+            // Check if HLS version exists
+            try {
+                const hlsCheck = await fetch(hlsUrl, { method: 'HEAD' });
+
+                if (hlsCheck.ok && Hls.isSupported()) {
+                    // Use HLS.js for adaptive streaming
+                    hlsInstance = new Hls({
+                        enableWorker: true,
+                        lowLatencyMode: false,
+                        backBufferLength: 90
+                    });
+
+                    hlsInstance.loadSource(hlsUrl);
+                    hlsInstance.attachMedia(video);
+
+                    hlsInstance.on(Hls.Events.MANIFEST_PARSED, function() {
+                        // Auto-play when ready
+                        video.play().catch(() => {});
+                    });
+
+                    hlsInstance.on(Hls.Events.ERROR, function(event, data) {
+                        if (data.fatal) {
+                            console.error('HLS fatal error, falling back to MP4');
+                            // Fall back to direct MP4
+                            if (hlsInstance) {
+                                hlsInstance.destroy();
+                                hlsInstance = null;
+                            }
+                            video.src = '/api/file/' + item.key;
+                            video.load();
+                        }
+                    });
+                } else if (hlsCheck.ok && video.canPlayType('application/vnd.apple.mpegurl')) {
+                    // Native HLS support (Safari)
+                    video.src = hlsUrl;
+                    video.load();
+                } else {
+                    throw new Error('HLS not available');
+                }
+            } catch (e) {
+                // HLS not available, fall back to direct MP4
+                video.src = '/api/file/' + item.key;
+                video.load();
+            }
         } else {
             video.style.display = 'none';
             video.pause();
@@ -518,7 +567,7 @@ export function getJavaScript() {
             img.style.display = 'block';
             img.src = '/api/file/' + item.key;
         }
-        
+
         document.getElementById('currentIndex').textContent = currentIndex + 1;
         document.getElementById('totalMedia').textContent = mediaItems.length;
     }
@@ -530,7 +579,13 @@ export function getJavaScript() {
         if (video) {
             video.pause();
         }
-        
+
+        // Clean up HLS instance before switching
+        if (hlsInstance) {
+            hlsInstance.destroy();
+            hlsInstance = null;
+        }
+
         currentIndex = (currentIndex + direction + mediaItems.length) % mediaItems.length;
         updateLightbox();
     }
@@ -551,6 +606,11 @@ export function getJavaScript() {
                     // Pause video when closing
                     const video = document.getElementById('lightboxVideo');
                     if (video) video.pause();
+                    // Clean up HLS instance
+                    if (hlsInstance) {
+                        hlsInstance.destroy();
+                        hlsInstance = null;
+                    }
                     lightboxModal.hide();
                     break;
             }
@@ -565,6 +625,11 @@ export function getJavaScript() {
             if (video) {
                 video.pause();
                 video.src = '';
+            }
+            // Clean up HLS instance
+            if (hlsInstance) {
+                hlsInstance.destroy();
+                hlsInstance = null;
             }
         });
 
