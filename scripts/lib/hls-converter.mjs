@@ -3,19 +3,15 @@
  * Converts videos to adaptive bitrate HLS format with multiple quality levels
  */
 
-import ffmpeg from 'fluent-ffmpeg';
-import ffmpegPath from '@ffmpeg-installer/ffmpeg';
-import ffprobePath from '@ffprobe-installer/ffprobe';
-import { writeFile, mkdir, readdir, readFile, rm } from 'fs/promises';
+import { writeFile, mkdir, readdir, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { execSync } from 'child_process';
 
-// Configure ffmpeg and ffprobe
-// The GitHub Actions workflow uses AnimMouse/setup-ffmpeg to install a modern version
-// For local development, use the packaged binaries
-ffmpeg.setFfmpegPath(ffmpegPath.path);
-ffmpeg.setFfprobePath(ffprobePath.path);
+// Use system ffmpeg/ffprobe which supports modern codecs
+// GitHub Actions workflow uses AnimMouse/setup-ffmpeg to install a modern version
+const FFMPEG_CMD = 'ffmpeg';
+const FFPROBE_CMD = 'ffprobe';
 
 /**
  * HLS quality presets for adaptive streaming
@@ -64,25 +60,23 @@ export async function getVideoMetadata(videoBuffer) {
   try {
     await writeFile(tempVideoPath, videoBuffer);
 
-    return new Promise((resolve, reject) => {
-      ffmpeg.ffprobe(tempVideoPath, (err, metadata) => {
-        // Clean up temp file
-        rm(tempVideoPath).catch(() => {});
+    const output = execSync(
+      `${FFPROBE_CMD} -v error -print_format json -show_format -show_streams "${tempVideoPath}"`,
+      { encoding: 'utf8' }
+    );
 
-        if (err) {
-          reject(err);
-          return;
-        }
+    // Clean up temp file
+    await rm(tempVideoPath).catch(() => {});
 
-        const videoStream = metadata.streams.find(s => s.codec_type === 'video');
-        resolve({
-          width: videoStream?.width || 0,
-          height: videoStream?.height || 0,
-          duration: metadata.format.duration || 0,
-          bitrate: metadata.format.bit_rate || 0
-        });
-      });
-    });
+    const metadata = JSON.parse(output);
+    const videoStream = metadata.streams.find(s => s.codec_type === 'video');
+
+    return {
+      width: videoStream?.width || 0,
+      height: videoStream?.height || 0,
+      duration: parseFloat(metadata.format.duration) || 0,
+      bitrate: parseInt(metadata.format.bit_rate) || 0
+    };
   } catch (error) {
     await rm(tempVideoPath).catch(() => {});
     throw error;
@@ -120,49 +114,46 @@ function selectQualityPresets(sourceWidth, sourceHeight) {
  * Convert a single video to a specific HLS quality level
  */
 async function convertToHLSQuality(videoPath, outputDir, preset) {
-  return new Promise((resolve, reject) => {
-    const playlistName = `${preset.name}.m3u8`;
-    const segmentPattern = `${preset.name}_%03d.ts`;
-    let stderrOutput = '';
+  const playlistName = `${preset.name}.m3u8`;
+  const segmentPattern = `${preset.name}_%03d.ts`;
 
-    // Extract target height from preset resolution
-    const targetHeight = parseInt(preset.resolution.split('x')[1]);
+  // Extract target height from preset resolution
+  const targetHeight = parseInt(preset.resolution.split('x')[1]);
 
-    // Use scale filter to preserve aspect ratio
-    // Scale based on height, width auto-calculated (-2 ensures even number)
-    const scaleFilter = `scale=-2:${targetHeight}`;
+  // Use scale filter to preserve aspect ratio
+  // Scale based on height, width auto-calculated (-2 ensures even number)
+  const scaleFilter = `scale=-2:${targetHeight}`;
 
-    const command = ffmpeg(videoPath)
-      .outputOptions([
-        '-c:v libx264',           // Video codec
-        '-c:a aac',               // Audio codec
-        '-pix_fmt yuv420p',       // Force 8-bit color (compatibility)
-        '-preset fast',           // Encoding speed
-        '-profile:v main',        // H.264 profile
-        `-vf ${scaleFilter}`,     // Scale preserving aspect ratio
-        `-b:v ${preset.videoBitrate}`,
-        `-maxrate ${preset.maxrate}`,
-        `-bufsize ${preset.bufsize}`,
-        `-b:a ${preset.audioBitrate}`,
-        '-sc_threshold 0',        // Disable scene detection
-        '-g 48',                  // GOP size (2 seconds at 24fps)
-        '-keyint_min 48',
-        '-hls_time 4',            // Segment duration
-        '-hls_playlist_type vod', // Video on demand
-        '-hls_segment_filename', join(outputDir, segmentPattern)
-      ])
-      .output(join(outputDir, playlistName))
-      .on('end', () => resolve())
-      .on('error', (err, stdout, stderr) => {
-        console.error('  ffmpeg stderr:', stderr);
-        reject(new Error(`ffmpeg error: ${err.message}`));
-      })
-      .on('stderr', (stderrLine) => {
-        stderrOutput += stderrLine + '\n';
-      });
+  const ffmpegArgs = [
+    '-i', videoPath,
+    '-c:v', 'libx264',
+    '-c:a', 'aac',
+    '-pix_fmt', 'yuv420p',
+    '-preset', 'fast',
+    '-profile:v', 'main',
+    '-vf', scaleFilter,
+    '-b:v', preset.videoBitrate,
+    '-maxrate', preset.maxrate,
+    '-bufsize', preset.bufsize,
+    '-b:a', preset.audioBitrate,
+    '-sc_threshold', '0',
+    '-g', '48',
+    '-keyint_min', '48',
+    '-hls_time', '4',
+    '-hls_playlist_type', 'vod',
+    '-hls_segment_filename', join(outputDir, segmentPattern),
+    join(outputDir, playlistName)
+  ];
 
-    command.run();
-  });
+  try {
+    execSync(`${FFMPEG_CMD} ${ffmpegArgs.map(arg => `"${arg}"`).join(' ')}`, {
+      stdio: 'pipe',
+      encoding: 'utf8'
+    });
+  } catch (error) {
+    console.error('  ffmpeg stderr:', error.stderr);
+    throw new Error(`ffmpeg error: ${error.message}`);
+  }
 }
 
 /**
