@@ -90,9 +90,13 @@ export default {
   };
 
   async function createAuthToken(env: Env, audience: string): Promise<string> {
-    const secret = env.AUTH_SECRET || (env.GALLERY_PASSWORD || "");
+    const secret = env.AUTH_SECRET;
+    if (!secret) {
+      throw new Error("AUTH_SECRET must be configured");
+    }
     const issuedAt = Math.floor(Date.now() / 1000);
-    const payload = `${audience}.${issuedAt}`;
+    const version = (await env.CACHE_VERSION.get("auth_version")) || "1";
+    const payload = `${audience}.${version}.${issuedAt}`;
     const key = await crypto.subtle.importKey(
       "raw",
       new TextEncoder().encode(secret),
@@ -107,18 +111,23 @@ export default {
 
   async function validateAuthToken(env: Env, audience: string, token: string): Promise<boolean> {
     const parts = token.split(".");
-    if (parts.length < 3) return false;
+    if (parts.length < 4) return false;
     const tokenAudience = parts[0];
-    const issuedAtStr = parts[1];
-    const sig = parts.slice(2).join(".");
-    if (tokenAudience !== audience) return false;
+    const tokenVersion = parts[1];
+    const issuedAtStr = parts[2];
+    const sig = parts.slice(3).join(".");
+    if (!timingSafeEqual(tokenAudience, audience)) return false;
+
+    const currentVersion = (await env.CACHE_VERSION.get("auth_version")) || "1";
+    if (!timingSafeEqual(tokenVersion, currentVersion)) return false;
     const issuedAt = Number(issuedAtStr);
     if (!Number.isFinite(issuedAt)) return false;
     // Optional: expire after 30 days
     const now = Math.floor(Date.now() / 1000);
     if (now - issuedAt > 60 * 60 * 24 * 30) return false;
 
-    const secret = env.AUTH_SECRET || (env.GALLERY_PASSWORD || "");
+    const secret = env.AUTH_SECRET;
+    if (!secret) return false;
     const key = await crypto.subtle.importKey(
       "raw",
       new TextEncoder().encode(secret),
@@ -126,7 +135,7 @@ export default {
       false,
       ["sign"]
     );
-    const payload = `${audience}.${issuedAt}`;
+    const payload = `${audience}.${tokenVersion}.${issuedAt}`;
     const expected = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
     const expectedB64 = arrayBufferToBase64(expected);
     return timingSafeEqual(sig, expectedB64);
@@ -135,7 +144,11 @@ export default {
   function arrayBufferToBase64(buffer: ArrayBuffer): string {
     const bytes = new Uint8Array(buffer);
     let binary = "";
-    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    const chunkSize = 0x8000; // avoid call stack limits
+    for (let i = 0; i < bytes.byteLength; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode.apply(null, Array.from(chunk) as unknown as number[]);
+    }
     return btoa(binary);
   }
 
