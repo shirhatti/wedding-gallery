@@ -122,17 +122,17 @@ export function getCSS() {
         pointer-events: none;
     }
     
-    /* Instagram-style Mobile Feed */
+    /* Instagram Profile-style Mobile Grid */
     @media (max-width: 768px) {
         body {
             padding: 0;
             background: #000;
         }
-        
+
         .container-fluid {
             padding: 0;
         }
-        
+
         .logo-header {
             position: sticky;
             top: 0;
@@ -143,65 +143,42 @@ export function getCSS() {
             border-bottom: 1px solid #333;
             text-align: center;
         }
-        
+
         .logo-header img {
             height: 40px;
             width: auto;
         }
-        
+
+        /* 3-column grid like Instagram profile */
         .gallery-grid {
-            display: block;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2px;
             padding: 0;
-            gap: 0;
         }
-        
+
         .gallery-item {
-            aspect-ratio: auto;
+            aspect-ratio: 1;
             border-radius: 0;
-            margin-bottom: 2px;
             position: relative;
+            background: #2a2a2a;
         }
-        
+
         .gallery-item img, .gallery-item video {
             width: 100%;
-            height: auto;
-            max-height: 100vh;
-            object-fit: contain;
-            background: #000;
+            height: 100%;
+            object-fit: cover;
         }
-        
-        .gallery-item::after {
-            content: attr(data-index);
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: rgba(0,0,0,0.5);
-            color: white;
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 0.8rem;
-            backdrop-filter: blur(10px);
-        }
-        
-        /* Video controls on mobile */
-        .gallery-item video {
-            max-height: 80vh;
-        }
-        
-        /* Smooth scroll behavior */
-        html {
-            scroll-behavior: smooth;
-            scroll-snap-type: y proximity;
-        }
-        
-        .gallery-item {
-            scroll-snap-align: start;
-            scroll-snap-stop: normal;
-        }
-        
+
         /* Hide hover effects on mobile */
         .gallery-item:hover img, .gallery-item:hover video {
             transform: none;
+        }
+
+        /* Video play overlay for mobile */
+        .video-indicator {
+            font-size: 0.7rem;
+            padding: 3px 6px;
         }
     }
     
@@ -342,17 +319,6 @@ export function getCSS() {
 
     .gallery-item:hover .play-overlay {
         opacity: 1;
-    }
-    
-    /* Improved mobile scrolling performance */
-    @media (max-width: 768px) {
-        * {
-            -webkit-overflow-scrolling: touch;
-        }
-        
-        .gallery-grid {
-            will-change: scroll-position;
-        }
     }`;
 }
 
@@ -386,9 +352,6 @@ export function getJavaScript() {
             
             renderGallery();
             setupLazyLoading();
-            if (isMobile) {
-                setupMobileInteractions();
-            }
         } catch (error) {
             document.getElementById('gallery').innerHTML = 
                 '<div class="col-12 text-center text-danger">Failed to load media</div>';
@@ -402,17 +365,16 @@ export function getJavaScript() {
         gallery.innerHTML = mediaItems.map((item, index) => {
             const isVideo = item.type === 'video';
             const dataIndex = (index + 1) + '/' + mediaItems.length;
-            const onclickAttr = !isMobile ? 'onclick="openLightbox(' + index + ')"' : '';
 
             if (isVideo) {
                 // Use thumbnail for videos in grid view instead of loading full video
-                return '<div class="gallery-item" data-index="' + dataIndex + '" ' + onclickAttr + '>' +
+                return '<div class="gallery-item" data-index="' + index + '" onclick="openLightbox(' + index + ')">' +
                     '<img class="media-lazy" data-src="/api/thumbnail/' + item.key + '?size=medium&v=' + cacheVersion + '" alt="' + item.name + '" loading="lazy">' +
                     '<div class="play-overlay"></div>' +
-                    '<div class="video-indicator">📹 Video</div>' +
+                    '<div class="video-indicator">📹</div>' +
                     '</div>';
             } else {
-                return '<div class="gallery-item" data-index="' + dataIndex + '" ' + onclickAttr + '>' +
+                return '<div class="gallery-item" data-index="' + index + '" onclick="openLightbox(' + index + ')">' +
                     '<img class="media-lazy" data-src="/api/thumbnail/' + item.key + '?size=medium&v=' + cacheVersion + '" alt="' + item.name + '" loading="lazy">' +
                     '</div>';
             }
@@ -440,40 +402,6 @@ export function getJavaScript() {
         });
 
         lazyMedia.forEach(media => mediaObserver.observe(media));
-    }
-    
-    // Setup mobile-specific interactions
-    function setupMobileInteractions() {
-        let lastTap = 0;
-
-        // Double-tap to open lightbox
-        document.querySelectorAll('.gallery-item').forEach((item, index) => {
-            item.addEventListener('touchend', function(e) {
-                const currentTime = new Date().getTime();
-                const tapLength = currentTime - lastTap;
-
-                if (tapLength < 500 && tapLength > 0) {
-                    e.preventDefault();
-                    openLightbox(index);
-                }
-                lastTap = currentTime;
-            });
-        });
-
-        // Track scroll position
-        let scrollTimeout;
-        window.addEventListener('scroll', () => {
-            clearTimeout(scrollTimeout);
-            scrollTimeout = setTimeout(() => {
-                const items = document.querySelectorAll('.gallery-item');
-                items.forEach((item, index) => {
-                    const rect = item.getBoundingClientRect();
-                    if (rect.top >= 0 && rect.top <= window.innerHeight / 2) {
-                        currentIndex = index;
-                    }
-                });
-            }, 100);
-        });
     }
     
     // Open lightbox
@@ -639,31 +567,8 @@ export function getJavaScript() {
             }
         });
 
-        // Double-tap to close on mobile
-        if (isMobile) {
-            let lastTap = 0;
-            const modalBody = lightboxEl.querySelector('.modal-body');
-
-            modalBody.addEventListener('touchend', function(e) {
-                const currentTime = new Date().getTime();
-                const tapLength = currentTime - lastTap;
-
-                if (tapLength < 500 && tapLength > 0) {
-                    e.preventDefault();
-                    closeLightbox();
-                }
-                lastTap = currentTime;
-            });
-        }
     }
     
     // Initialize
-    loadMedia();
-    
-    // Handle orientation change
-    window.addEventListener('orientationchange', () => {
-        setTimeout(() => {
-            location.reload();
-        }, 500);
-    });`;
+    loadMedia();`;
 }
