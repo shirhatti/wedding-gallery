@@ -345,16 +345,14 @@ export function getJavaScript() {
             mediaItems = data.media;
             
             if (mediaItems.length === 0) {
-                document.getElementById('gallery').innerHTML = 
-                    '<div class="col-12 text-center">No media found</div>';
+                setGalleryMessage('No media found');
                 return;
             }
             
             renderGallery();
             setupLazyLoading();
         } catch (error) {
-            document.getElementById('gallery').innerHTML = 
-                '<div class="col-12 text-center text-danger">Failed to load media</div>';
+            setGalleryMessage('Failed to load media', 'text-danger');
             console.error('Error:', error);
         }
     }
@@ -362,23 +360,54 @@ export function getJavaScript() {
     // Render gallery grid
     function renderGallery() {
         const gallery = document.getElementById('gallery');
-        gallery.innerHTML = mediaItems.map((item, index) => {
+        // Clear existing children safely
+        while (gallery.firstChild) gallery.removeChild(gallery.firstChild);
+
+        const fragment = document.createDocumentFragment();
+
+        mediaItems.forEach((item, index) => {
             const isVideo = item.type === 'video';
-            const dataIndex = (index + 1) + '/' + mediaItems.length;
+            const container = document.createElement('div');
+            container.className = 'gallery-item';
+            container.setAttribute('data-index', (index + 1) + '/' + mediaItems.length);
+
+            const img = document.createElement('img');
+            img.className = 'media-lazy';
+            img.setAttribute('data-src', '/api/thumbnail/' + item.key + '?size=medium&v=' + cacheVersion);
+            img.loading = 'lazy';
+            // Set alt via property to avoid HTML injection
+            img.alt = String(item.name || '');
+
+            container.appendChild(img);
+
+            if (isMobile === false) {
+                container.addEventListener('click', () => openLightbox(index));
+            }
 
             if (isVideo) {
-                // Use thumbnail for videos in grid view instead of loading full video
-                return '<div class="gallery-item" data-index="' + index + '" onclick="openLightbox(' + index + ')">' +
-                    '<img class="media-lazy" data-src="/api/thumbnail/' + item.key + '?size=medium&v=' + cacheVersion + '" alt="' + item.name + '" loading="lazy">' +
-                    '<div class="play-overlay"></div>' +
-                    '<div class="video-indicator">📹</div>' +
-                    '</div>';
-            } else {
-                return '<div class="gallery-item" data-index="' + index + '" onclick="openLightbox(' + index + ')">' +
-                    '<img class="media-lazy" data-src="/api/thumbnail/' + item.key + '?size=medium&v=' + cacheVersion + '" alt="' + item.name + '" loading="lazy">' +
-                    '</div>';
+                const playOverlay = document.createElement('div');
+                playOverlay.className = 'play-overlay';
+                container.appendChild(playOverlay);
+
+                const videoIndicator = document.createElement('div');
+                videoIndicator.className = 'video-indicator';
+                videoIndicator.textContent = '📹 Video';
+                container.appendChild(videoIndicator);
             }
-        }).join('');
+
+            fragment.appendChild(container);
+        });
+
+        gallery.appendChild(fragment);
+    }
+
+    function setGalleryMessage(text, extraClass) {
+        const gallery = document.getElementById('gallery');
+        while (gallery.firstChild) gallery.removeChild(gallery.firstChild);
+        const div = document.createElement('div');
+        div.className = 'col-12 text-center' + (extraClass ? ' ' + extraClass : '');
+        div.textContent = text;
+        gallery.appendChild(div);
     }
     
     // Setup lazy loading with Intersection Observer

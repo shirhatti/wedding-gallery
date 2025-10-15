@@ -6,6 +6,7 @@ interface Env {
   DB: D1Database;
   CACHE_VERSION: KVNamespace;
   GALLERY_PASSWORD?: string; // Simple password for gallery access
+  AUTH_SECRET?: string; // Secret used to sign auth cookie
 }
 
 export default {
@@ -45,7 +46,8 @@ export default {
 
           if (env.GALLERY_PASSWORD && password === env.GALLERY_PASSWORD) {
             const headers = new Headers();
-            headers.set("Set-Cookie", `gallery_auth=${env.GALLERY_PASSWORD}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`);
+            const token = await createAuthToken(env, url.origin);
+            headers.set("Set-Cookie", `gallery_auth=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`);
             headers.set("Location", "/");
             return new Response(null, { status: 302, headers });
           }
@@ -63,9 +65,9 @@ export default {
       if (env.GALLERY_PASSWORD) {
         const cookies = request.headers.get("Cookie") || "";
         const authCookie = cookies.split(";").find(c => c.trim().startsWith("gallery_auth="));
-        const authValue = authCookie?.split("=")[1];
-
-        if (authValue !== env.GALLERY_PASSWORD) {
+        const authValue = authCookie?.split("=")[1] || "";
+        const valid = await validateAuthToken(env, url.origin, authValue);
+        if (!valid) {
           return Response.redirect(url.origin + "/login", 302);
         }
       }
@@ -86,6 +88,69 @@ export default {
       return new Response("Not Found", { status: 404 });
     },
   };
+
+  async function createAuthToken(env: Env, audience: string): Promise<string> {
+    const secret = env.AUTH_SECRET || (env.GALLERY_PASSWORD || "");
+    const issuedAt = Math.floor(Date.now() / 1000);
+    const payload = `${audience}.${issuedAt}`;
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+    const b64 = arrayBufferToBase64(sig);
+    return `${payload}.${b64}`;
+  }
+
+  async function validateAuthToken(env: Env, audience: string, token: string): Promise<boolean> {
+    const parts = token.split(".");
+    if (parts.length < 3) return false;
+    const tokenAudience = parts[0];
+    const issuedAtStr = parts[1];
+    const sig = parts.slice(2).join(".");
+    if (tokenAudience !== audience) return false;
+    const issuedAt = Number(issuedAtStr);
+    if (!Number.isFinite(issuedAt)) return false;
+    // Optional: expire after 30 days
+    const now = Math.floor(Date.now() / 1000);
+    if (now - issuedAt > 60 * 60 * 24 * 30) return false;
+
+    const secret = env.AUTH_SECRET || (env.GALLERY_PASSWORD || "");
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const payload = `${audience}.${issuedAt}`;
+    const expected = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+    const expectedB64 = arrayBufferToBase64(expected);
+    return timingSafeEqual(sig, expectedB64);
+  }
+
+  function arrayBufferToBase64(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  }
+
+  function timingSafeEqual(a: string, b: string): boolean {
+    const aLen = a.length;
+    const bLen = b.length;
+    let mismatch = aLen === bLen ? 0 : 1;
+    const len = Math.max(aLen, bLen);
+    for (let i = 0; i < len; i++) {
+      const ac = a.charCodeAt(i) || 0;
+      const bc = b.charCodeAt(i) || 0;
+      mismatch |= ac ^ bc;
+    }
+    return mismatch === 0;
+  }
 
   function getLoginPage(error: boolean): string {
     return `<!DOCTYPE html>

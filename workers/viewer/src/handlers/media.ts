@@ -7,29 +7,48 @@ export async function handleGetFile(url, env, corsHeaders, request) {
     const range = request.headers.get("range");
     
     if (range) {
-      // Handle range request for video streaming
-      const object = await env.R2_BUCKET.get(key);
-      
+      // Handle range request for video streaming efficiently using R2 range
+      // Parse the Range header conservatively (only start supported)
+      const startStr = range.replace(/bytes=/, "").split("-")[0];
+      const start = Number(startStr);
+      if (Number.isNaN(start) || start < 0) {
+        return new Response("Invalid Range", { status: 416 });
+      }
+
+      // Request only the range from R2; omit end to stream to end
+      const object = await env.R2_BUCKET.get(key, { range: { offset: start } });
       if (!object) {
         return new Response("File not found", { status: 404 });
       }
-      
-      const bytes = await object.arrayBuffer();
-      const start = Number(range.replace(/bytes=/, "").split("-")[0]);
-      const end = bytes.byteLength - 1;
+
+      // Get full size via HEAD to compute Content-Range and Content-Length
+      const head = await env.R2_BUCKET.head(key);
+      if (!head) {
+        return new Response("File not found", { status: 404 });
+      }
+
+      const totalSize = head.size ?? (object.size as number | undefined);
+      if (typeof totalSize !== 'number') {
+        // Fallback: stream without range metadata
+        const headers = new Headers();
+        object.writeHttpMetadata(headers);
+        headers.set("Accept-Ranges", "bytes");
+        Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
+        return new Response(object.body, { status: 206, headers });
+      }
+
+      const end = totalSize - 1;
       const contentLength = end - start + 1;
-      
+
       const headers = new Headers();
       object.writeHttpMetadata(headers);
-      headers.set("Content-Range", "bytes " + start + "-" + end + "/" + bytes.byteLength);
+      headers.set("Content-Range", `bytes ${start}-${end}/${totalSize}`);
       headers.set("Accept-Ranges", "bytes");
-      headers.set("Content-Length", contentLength);
-      headers.set("Content-Type", object.httpMetadata?.contentType || "video/mp4");
+      headers.set("Content-Length", String(contentLength));
+      headers.set("Content-Type", head.httpMetadata?.contentType || object.httpMetadata?.contentType || "video/mp4");
       Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
-      
-      const slicedBytes = bytes.slice(start, end + 1);
-      
-      return new Response(slicedBytes, {
+
+      return new Response(object.body, {
         status: 206,
         headers,
       });
