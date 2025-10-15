@@ -12,17 +12,10 @@ import { join } from 'path';
 import { execSync } from 'child_process';
 
 // Configure ffmpeg and ffprobe
-// In CI environments, prefer system ffmpeg which has better codec support
-// The @ffmpeg-installer package uses an old 2018 static build that doesn't support some codecs (e.g., apac)
-if (process.env.CI) {
-  // Use system ffmpeg/ffprobe in CI (Ubuntu runners have recent versions)
-  ffmpeg.setFfmpegPath('ffmpeg');
-  ffmpeg.setFfprobePath('ffprobe');
-} else {
-  // Use packaged binaries for local development
-  ffmpeg.setFfmpegPath(ffmpegPath.path);
-  ffmpeg.setFfprobePath(ffprobePath.path);
-}
+// The GitHub Actions workflow uses AnimMouse/setup-ffmpeg to install a modern version
+// For local development, use the packaged binaries
+ffmpeg.setFfmpegPath(ffmpegPath.path);
+ffmpeg.setFfprobePath(ffprobePath.path);
 
 /**
  * HLS quality presets for adaptive streaming
