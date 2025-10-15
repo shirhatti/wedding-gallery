@@ -73,11 +73,14 @@ export async function getVideoMetadata(videoBuffer) {
         }
 
         const videoStream = metadata.streams.find(s => s.codec_type === 'video');
+        const audioStream = metadata.streams.find(s => s.codec_type === 'audio');
         resolve({
           width: videoStream?.width || 0,
           height: videoStream?.height || 0,
           duration: metadata.format.duration || 0,
-          bitrate: metadata.format.bit_rate || 0
+          bitrate: metadata.format.bit_rate || 0,
+          hasAudio: !!audioStream,
+          audioCodec: audioStream?.codec_name || 'none'
         });
       });
     });
@@ -117,7 +120,7 @@ function selectQualityPresets(sourceWidth, sourceHeight) {
 /**
  * Convert a single video to a specific HLS quality level
  */
-async function convertToHLSQuality(videoPath, outputDir, preset) {
+async function convertToHLSQuality(videoPath, outputDir, preset, hasAudio) {
   return new Promise((resolve, reject) => {
     const playlistName = `${preset.name}.m3u8`;
     const segmentPattern = `${preset.name}_%03d.ts`;
@@ -130,25 +133,33 @@ async function convertToHLSQuality(videoPath, outputDir, preset) {
     // Scale based on height, width auto-calculated (-2 ensures even number)
     const scaleFilter = `scale=-2:${targetHeight}`;
 
+    const outputOptions = [
+      '-c:v libx264',           // Video codec
+      '-pix_fmt yuv420p',       // Force 8-bit color (compatibility)
+      '-preset fast',           // Encoding speed
+      '-profile:v main',        // H.264 profile
+      `-vf ${scaleFilter}`,     // Scale preserving aspect ratio
+      `-b:v ${preset.videoBitrate}`,
+      `-maxrate ${preset.maxrate}`,
+      `-bufsize ${preset.bufsize}`,
+      '-sc_threshold 0',        // Disable scene detection
+      '-g 48',                  // GOP size (2 seconds at 24fps)
+      '-keyint_min 48',
+      '-hls_time 4',            // Segment duration
+      '-hls_playlist_type vod', // Video on demand
+      '-hls_segment_filename', join(outputDir, segmentPattern)
+    ];
+
+    // Only add audio encoding options if the video has audio
+    if (hasAudio) {
+      outputOptions.splice(1, 0, '-c:a aac'); // Audio codec
+      outputOptions.push(`-b:a ${preset.audioBitrate}`);
+    } else {
+      outputOptions.splice(1, 0, '-an'); // No audio
+    }
+
     const command = ffmpeg(videoPath)
-      .outputOptions([
-        '-c:v libx264',           // Video codec
-        '-c:a aac',               // Audio codec
-        '-pix_fmt yuv420p',       // Force 8-bit color (compatibility)
-        '-preset fast',           // Encoding speed
-        '-profile:v main',        // H.264 profile
-        `-vf ${scaleFilter}`,     // Scale preserving aspect ratio
-        `-b:v ${preset.videoBitrate}`,
-        `-maxrate ${preset.maxrate}`,
-        `-bufsize ${preset.bufsize}`,
-        `-b:a ${preset.audioBitrate}`,
-        '-sc_threshold 0',        // Disable scene detection
-        '-g 48',                  // GOP size (2 seconds at 24fps)
-        '-keyint_min 48',
-        '-hls_time 4',            // Segment duration
-        '-hls_playlist_type vod', // Video on demand
-        '-hls_segment_filename', join(outputDir, segmentPattern)
-      ])
+      .outputOptions(outputOptions)
       .output(join(outputDir, playlistName))
       .on('end', () => resolve())
       .on('error', (err, stdout, stderr) => {
@@ -207,7 +218,8 @@ export async function convertToHLS(videoBuffer) {
 
     // Get video metadata to determine appropriate quality levels
     const metadata = await getVideoMetadata(videoBuffer);
-    console.log(`  Source resolution: ${metadata.width}x${metadata.height}, duration: ${metadata.duration.toFixed(1)}s`);
+    const audioInfo = metadata.hasAudio ? `audio: ${metadata.audioCodec}` : 'no audio';
+    console.log(`  Source resolution: ${metadata.width}x${metadata.height}, duration: ${metadata.duration.toFixed(1)}s, ${audioInfo}`);
 
     // Select quality presets based on source resolution
     const selectedPresets = selectQualityPresets(metadata.width, metadata.height);
@@ -216,7 +228,7 @@ export async function convertToHLS(videoBuffer) {
     // Convert to each quality level
     for (const preset of selectedPresets) {
       console.log(`  Converting to ${preset.name}...`);
-      await convertToHLSQuality(tempVideoPath, outputDir, preset);
+      await convertToHLSQuality(tempVideoPath, outputDir, preset, metadata.hasAudio);
     }
 
     // Create master playlist
