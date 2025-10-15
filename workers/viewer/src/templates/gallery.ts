@@ -391,7 +391,8 @@ export function getJavaScript() {
 
                 const videoIndicator = document.createElement('div');
                 videoIndicator.className = 'video-indicator';
-                videoIndicator.textContent = '📹 Video';
+                videoIndicator.setAttribute('aria-label', 'Video');
+                videoIndicator.textContent = 'Video';
                 container.appendChild(videoIndicator);
             }
 

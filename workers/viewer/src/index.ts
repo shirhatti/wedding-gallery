@@ -13,6 +13,11 @@ export default {
     async fetch(request: Request, env: Env): Promise<Response> {
       const url = new URL(request.url);
 
+      // Require a strong AUTH_SECRET when password protection is enabled
+      if (env.GALLERY_PASSWORD && !env.AUTH_SECRET) {
+        throw new Error("AUTH_SECRET must be configured when GALLERY_PASSWORD is set");
+      }
+
       // CORS headers
       const corsHeaders = {
         "Access-Control-Allow-Origin": "*",

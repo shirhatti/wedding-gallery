@@ -1,4 +1,6 @@
 // Media file handler with range support for video streaming
+const MAX_RANGE_SIZE = 50 * 1024 * 1024; // 50MB cap to prevent abuse
+
 export async function handleGetFile(url, env, corsHeaders, request) {
   const key = decodeURIComponent(url.pathname.replace("/api/file/", ""));
   
@@ -10,23 +12,31 @@ export async function handleGetFile(url, env, corsHeaders, request) {
       // Handle range request for video streaming efficiently using R2 range
       const match = range.match(/^bytes=(\d+)-(\d+)?$/);
       if (!match) {
-        return new Response("Invalid Range", { status: 416 });
+        return new Response("Invalid Range: format must be bytes=start[-end]", { status: 416 });
       }
       const start = Number(match[1]);
       const endHeader = match[2] !== undefined ? Number(match[2]) : undefined;
       if (!Number.isFinite(start) || start < 0 || (endHeader !== undefined && (!Number.isFinite(endHeader) || endHeader < start))) {
-        return new Response("Invalid Range", { status: 416 });
+        return new Response("Invalid Range: invalid start/end", { status: 416 });
+      }
+
+      // Range size limits to prevent abuse
+      const requestedLength = endHeader !== undefined ? (endHeader - start + 1) : undefined;
+      if (requestedLength !== undefined && requestedLength > MAX_RANGE_SIZE) {
+        return new Response("Invalid Range: requested length too large", { status: 416 });
       }
 
       // Request only the requested range from R2
-      const length = endHeader !== undefined ? (endHeader - start + 1) : undefined;
-      const object = await env.R2_BUCKET.get(key, { range: { offset: start, length } });
+      const rangeOpts = endHeader !== undefined
+        ? { offset: start, length: requestedLength }
+        : { offset: start };
+      const object = await env.R2_BUCKET.get(key, { range: rangeOpts });
       if (!object) {
         return new Response("File not found", { status: 404 });
       }
 
       const totalSize = object.size as number | undefined;
-      if (typeof totalSize !== 'number') {
+      if (typeof totalSize !== "number") {
         // Fallback: stream without range metadata
         const headers = new Headers();
         object.writeHttpMetadata(headers);
@@ -36,7 +46,7 @@ export async function handleGetFile(url, env, corsHeaders, request) {
       }
 
       if (start >= totalSize) {
-        return new Response("Invalid Range", { status: 416 });
+        return new Response("Invalid Range: start exceeds file size", { status: 416 });
       }
 
       const end = endHeader !== undefined ? Math.min(endHeader, totalSize - 1) : totalSize - 1;
