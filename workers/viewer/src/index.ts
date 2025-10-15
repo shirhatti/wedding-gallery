@@ -64,8 +64,8 @@ export default {
       // Check authentication if password is set
       if (env.GALLERY_PASSWORD) {
         const cookies = request.headers.get("Cookie") || "";
-        const authCookie = cookies.split(";").find(c => c.trim().startsWith("gallery_auth="));
-        const authValue = authCookie?.split("=")[1] || "";
+        const match = cookies.match(/(?:^|;)\s*gallery_auth=([^;]+)/);
+        const authValue = match?.[1] ?? "";
         const valid = await validateAuthToken(env, url.origin, authValue);
         if (!valid) {
           return Response.redirect(url.origin + "/login", 302);
@@ -96,7 +96,8 @@ export default {
     }
     const issuedAt = Math.floor(Date.now() / 1000);
     const version = (await env.CACHE_VERSION.get("auth_version")) || "1";
-    const payload = `${audience}.${version}.${issuedAt}`;
+    // Use '|' inside payload to avoid conflicts with '.' separator
+    const payload = `${audience}|${version}|${issuedAt}`;
     const key = await crypto.subtle.importKey(
       "raw",
       new TextEncoder().encode(secret),
@@ -110,12 +111,13 @@ export default {
   }
 
   async function validateAuthToken(env: Env, audience: string, token: string): Promise<boolean> {
-    const parts = token.split(".");
-    if (parts.length < 4) return false;
-    const tokenAudience = parts[0];
-    const tokenVersion = parts[1];
-    const issuedAtStr = parts[2];
-    const sig = parts.slice(3).join(".");
+    const lastDot = token.lastIndexOf(".");
+    if (lastDot <= 0) return false;
+    const payload = token.slice(0, lastDot);
+    const sig = token.slice(lastDot + 1);
+
+    const [tokenAudience, tokenVersion, issuedAtStr] = payload.split("|");
+    if (!tokenAudience || !tokenVersion || !issuedAtStr) return false;
     if (!timingSafeEqual(tokenAudience, audience)) return false;
 
     const currentVersion = (await env.CACHE_VERSION.get("auth_version")) || "1";
@@ -135,7 +137,6 @@ export default {
       false,
       ["sign"]
     );
-    const payload = `${audience}.${tokenVersion}.${issuedAt}`;
     const expected = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
     const expectedB64 = arrayBufferToBase64(expected);
     return timingSafeEqual(sig, expectedB64);

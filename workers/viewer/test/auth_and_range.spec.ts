@@ -27,10 +27,12 @@ describe('Auth and Range handling', () => {
     const setCookie = res2.headers.get('Set-Cookie');
     expect(setCookie).toBeTruthy();
     expect(setCookie as string).toMatch(/gallery_auth=/);
+    const cookieMatch = (setCookie as string).match(/(?:^|;)\s*(gallery_auth=[^;]+)/);
+    const cookieHeader = cookieMatch ? cookieMatch[1] : '';
 
     // 3) pass cookie -> should access home page
     const res3 = await worker.fetch(new Request('https://example.com/', {
-      headers: { Cookie: setCookie as string },
+      headers: { Cookie: cookieHeader },
     }), env);
     expect(res3.status).toBe(200);
     expect(res3.headers.get('Content-Type')).toMatch(/text\/html/);
