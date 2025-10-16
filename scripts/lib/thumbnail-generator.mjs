@@ -4,19 +4,16 @@
  */
 
 import sharp from 'sharp';
-import ffmpeg from 'fluent-ffmpeg';
-import ffmpegPath from '@ffmpeg-installer/ffmpeg';
-import ffprobePath from '@ffprobe-installer/ffprobe';
-import { promisify } from 'util';
 import { writeFile, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import exifr from 'exifr';
 import convert from 'heic-convert';
+import { execSync } from 'child_process';
 
-// Configure ffmpeg and ffprobe
-ffmpeg.setFfmpegPath(ffmpegPath.path);
-ffmpeg.setFfprobePath(ffprobePath.path);
+// Use system ffmpeg/ffprobe (installed in CI via AnimMouse/setup-ffmpeg)
+const FFMPEG_CMD = 'ffmpeg';
+const FFPROBE_CMD = 'ffprobe';
 
 /**
  * Upload buffer to R2 via worker
@@ -47,27 +44,23 @@ export async function extractVideoMetadata(videoBuffer) {
 
   try {
     await writeFile(tempVideoPath, videoBuffer);
+    // Probe using ffprobe with JSON output
+    const output = execSync(
+      `${FFPROBE_CMD} -v error -print_format json -show_format -show_streams "${tempVideoPath}"`,
+      { encoding: 'utf8' }
+    );
 
-    return new Promise((resolve, reject) => {
-      ffmpeg.ffprobe(tempVideoPath, async (err, metadata) => {
-        // Clean up temp file
-        await unlink(tempVideoPath).catch(() => {});
+    // Clean up temp file
+    await unlink(tempVideoPath).catch(() => {});
 
-        if (err) {
-          reject(err);
-          return;
-        }
+    const metadata = JSON.parse(output);
+    const creationTime = metadata.format?.tags?.creation_time || null;
 
-        // Extract creation time from format tags (works for QuickTime/MP4)
-        const creationTime = metadata.format.tags?.creation_time;
-
-        resolve({
-          creation_time: creationTime || null,
-          duration: metadata.format.duration || 0,
-          metadata: metadata
-        });
-      });
-    });
+    return {
+      creation_time: creationTime,
+      duration: parseFloat(metadata.format?.duration || 0) || 0,
+      metadata
+    };
   } catch (error) {
     await unlink(tempVideoPath).catch(() => {});
     throw error;
@@ -85,17 +78,20 @@ export async function extractVideoThumbnail(videoBuffer) {
   try {
     await writeFile(tempVideoPath, videoBuffer);
 
-    // Extract frame at 1 second (preserving original aspect ratio)
-    await new Promise((resolve, reject) => {
-      ffmpeg(tempVideoPath)
-        .screenshots({
-          timestamps: ['1'],
-          filename: tempImagePath.split('/').pop(),
-          folder: tmpdir(),
-          size: '1920x?' // Preserve aspect ratio, max width 1920px
-        })
-        .on('end', resolve)
-        .on('error', reject);
+    // Extract frame at 1 second (preserving aspect ratio, max width 1920)
+    // Use scale filter to cap width at 1920 and keep even height
+    const ffmpegArgs = [
+      '-ss', '1',
+      '-i', tempVideoPath,
+      '-frames:v', '1',
+      '-vf', "scale='min(iw,1920)':'-2'",
+      '-y',
+      tempImagePath
+    ];
+
+    execSync(`${FFMPEG_CMD} ${ffmpegArgs.map(arg => `"${arg}"`).join(' ')}`, {
+      stdio: 'pipe',
+      encoding: 'utf8'
     });
 
     // Read the extracted frame
