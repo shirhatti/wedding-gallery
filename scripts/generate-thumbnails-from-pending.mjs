@@ -15,7 +15,7 @@ async function main() {
   const worker = await unstable_dev('scripts/process-locally.ts', {
     config: 'scripts/wrangler-process-locally.toml',
     experimental: { disableExperimentalWarning: true },
-    local: true
+    local: false
   });
 
   try {
