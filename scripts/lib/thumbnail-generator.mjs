@@ -16,7 +16,7 @@ const FFMPEG_CMD = 'ffmpeg';
 const FFPROBE_CMD = 'ffprobe';
 
 // ---------- Helper utilities ----------
-const SCALE_FILTER = 'scale=min(iw,1920):-2';
+const SCALE_FILTER = 'scale=1920:-2:force_original_aspect_ratio=decrease';
 
 function buildFfprobeJsonArgs(videoPath) {
   return [
