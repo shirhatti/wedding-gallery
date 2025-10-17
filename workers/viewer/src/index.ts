@@ -290,7 +290,6 @@ export default {
         SELECT key, filename, type, size, uploaded_at, date_taken, camera_make, camera_model
         FROM media
         ORDER BY COALESCE(date_taken, uploaded_at) ASC
-        LIMIT 1000
       `).all();
 
       interface MediaRow {
