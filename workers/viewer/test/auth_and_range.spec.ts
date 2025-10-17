@@ -11,10 +11,10 @@ describe('Auth and Range handling', () => {
       AUTH_SECRET: 'super-secret',
     } as any;
 
-    // 1) no cookie -> redirect to /login
+    // 1) no cookie -> redirect to /login with returnTo parameter
     const res1 = await worker.fetch(new Request('https://example.com/'), env);
     expect(res1.status).toBe(302);
-    expect(res1.headers.get('Location')).toBe('https://example.com/login');
+    expect(res1.headers.get('Location')).toBe('https://example.com/login?returnTo=%2F');
 
     // 2) login with correct password -> 302 and Set-Cookie
     const loginReq = new Request('https://example.com/login', {
@@ -36,6 +36,36 @@ describe('Auth and Range handling', () => {
     }), env);
     expect(res3.status).toBe(200);
     expect(res3.headers.get('Content-Type')).toMatch(/text\/html/);
+  });
+
+  it('auth flow with deep link: preserves original destination after login', async () => {
+    const env = {
+      R2_BUCKET: {} as any,
+      DB: {} as any,
+      CACHE_VERSION: { get: async () => '1' } as any,
+      GALLERY_PASSWORD: 'pw',
+      AUTH_SECRET: 'super-secret',
+    } as any;
+
+    // 1) Access deep link without auth -> redirect to /login with returnTo
+    const deepLinkUrl = 'https://example.com/some/deep/path?param=value';
+    const res1 = await worker.fetch(new Request(deepLinkUrl), env);
+    expect(res1.status).toBe(302);
+    const loginUrl = res1.headers.get('Location');
+    expect(loginUrl).toBe('https://example.com/login?returnTo=%2Fsome%2Fdeep%2Fpath%3Fparam%3Dvalue');
+
+    // 2) Login with correct password and returnTo -> redirects to original path
+    const loginReq = new Request('https://example.com/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'password=pw&returnTo=%2Fsome%2Fdeep%2Fpath%3Fparam%3Dvalue',
+    });
+    const res2 = await worker.fetch(loginReq, env);
+    expect(res2.status).toBe(302);
+    expect(res2.headers.get('Location')).toBe('/some/deep/path?param=value');
+    const setCookie = res2.headers.get('Set-Cookie');
+    expect(setCookie).toBeTruthy();
+    expect(setCookie as string).toMatch(/gallery_auth=/);
   });
 
   it('range request: returns 206 with proper headers', async () => {

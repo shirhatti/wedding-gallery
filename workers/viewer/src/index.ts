@@ -48,20 +48,22 @@ export default {
         if (request.method === "POST") {
           const formData = await request.formData();
           const password = formData.get("password")?.toString() || "";
+          const returnTo = formData.get("returnTo")?.toString() || "/";
 
           if (env.GALLERY_PASSWORD && password === env.GALLERY_PASSWORD) {
             const headers = new Headers();
             const token = await createAuthToken(env, url.origin);
             headers.set("Set-Cookie", `gallery_auth=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`);
-            headers.set("Location", "/");
+            headers.set("Location", returnTo);
             return new Response(null, { status: 302, headers });
           }
 
-          return new Response(getLoginPage(true), {
+          return new Response(getLoginPage(true, returnTo), {
             headers: { "Content-Type": "text/html" }
           });
         }
-        return new Response(getLoginPage(false), {
+        const returnTo = url.searchParams.get("returnTo") || "/";
+        return new Response(getLoginPage(false, returnTo), {
           headers: { "Content-Type": "text/html" }
         });
       }
@@ -73,7 +75,8 @@ export default {
         const authValue = match?.[1] ?? "";
         const valid = await validateAuthToken(env, url.origin, authValue);
         if (!valid) {
-          return Response.redirect(url.origin + "/login", 302);
+          const returnTo = encodeURIComponent(url.pathname + url.search);
+          return Response.redirect(url.origin + "/login?returnTo=" + returnTo, 302);
         }
       }
 
@@ -171,7 +174,16 @@ export default {
     return mismatch === 0;
   }
 
-  function getLoginPage(error: boolean): string {
+  function escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function getLoginPage(error: boolean, returnTo: string = "/"): string {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -275,6 +287,7 @@ export default {
         <p>Enter the password to view the gallery</p>
         ${error ? "<div class=\"error\">Invalid password. Please try again.</div>" : ""}
         <form method="POST">
+            <input type="hidden" name="returnTo" value="${escapeHtml(returnTo)}">
             <input type="password" name="password" placeholder="Enter password" required autofocus>
             <button type="submit">Access Gallery</button>
         </form>
