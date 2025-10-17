@@ -4,19 +4,63 @@
  */
 
 import sharp from 'sharp';
-import ffmpeg from 'fluent-ffmpeg';
-import ffmpegPath from '@ffmpeg-installer/ffmpeg';
-import ffprobePath from '@ffprobe-installer/ffprobe';
-import { promisify } from 'util';
 import { writeFile, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import exifr from 'exifr';
 import convert from 'heic-convert';
+import { execFileSync } from 'child_process';
 
-// Configure ffmpeg and ffprobe
-ffmpeg.setFfmpegPath(ffmpegPath.path);
-ffmpeg.setFfprobePath(ffprobePath.path);
+// Use system ffmpeg/ffprobe (installed in CI via AnimMouse/setup-ffmpeg)
+const FFMPEG_CMD = 'ffmpeg';
+const FFPROBE_CMD = 'ffprobe';
+
+// ---------- Helper utilities ----------
+const SCALE_FILTER = 'scale=min(iw,1920):-2';
+
+function buildFfprobeJsonArgs(videoPath) {
+  return [
+    '-v', 'error',
+    '-print_format', 'json',
+    '-show_format',
+    '-show_streams',
+    videoPath,
+  ];
+}
+
+function buildExtractFrameArgs(videoPath, seekTimestamp, outputImagePath) {
+  return [
+    '-ss', String(seekTimestamp),
+    '-i', videoPath,
+    '-frames:v', '1',
+    '-vf', SCALE_FILTER,
+    '-y',
+    outputImagePath,
+  ];
+}
+
+function parseFfprobeJson(output) {
+  try {
+    return JSON.parse(output);
+  } catch (e) {
+    throw new Error('extractVideoMetadata: failed to parse ffprobe JSON');
+  }
+}
+
+function logStderr(prefix, error) {
+  try {
+    const stderr = error && error.stderr ? error.stderr.toString() : '';
+    if (stderr) {
+      console.error(`${prefix}:`, stderr);
+    } else if (error && error.message) {
+      console.error(`${prefix}:`, error.message);
+    } else if (error) {
+      console.error(`${prefix}:`, String(error));
+    }
+  } catch {
+    // best-effort logging only
+  }
+}
 
 /**
  * Upload buffer to R2 via worker
@@ -47,29 +91,31 @@ export async function extractVideoMetadata(videoBuffer) {
 
   try {
     await writeFile(tempVideoPath, videoBuffer);
-
-    return new Promise((resolve, reject) => {
-      ffmpeg.ffprobe(tempVideoPath, async (err, metadata) => {
-        // Clean up temp file
-        await unlink(tempVideoPath).catch(() => {});
-
-        if (err) {
-          reject(err);
-          return;
-        }
-
-        // Extract creation time from format tags (works for QuickTime/MP4)
-        const creationTime = metadata.format.tags?.creation_time;
-
-        resolve({
-          creation_time: creationTime || null,
-          duration: metadata.format.duration || 0,
-          metadata: metadata
-        });
+    // Probe using ffprobe with JSON output (no shell)
+    let output;
+    try {
+      output = execFileSync(FFPROBE_CMD, buildFfprobeJsonArgs(tempVideoPath), {
+        encoding: 'utf8',
+        stdio: 'pipe',
       });
-    });
+    } catch (error) {
+      logStderr('ffprobe error in extractVideoMetadata', error);
+      throw new Error('extractVideoMetadata: ffprobe failed');
+    } finally {
+      await Promise.allSettled([
+        unlink(tempVideoPath),
+      ]);
+    }
+
+    const metadata = parseFfprobeJson(output);
+    const creationTime = metadata.format?.tags?.creation_time || null;
+
+    return {
+      creation_time: creationTime,
+      duration: parseFloat(metadata.format?.duration || 0) || 0,
+      metadata
+    };
   } catch (error) {
-    await unlink(tempVideoPath).catch(() => {});
     throw error;
   }
 }
@@ -85,31 +131,48 @@ export async function extractVideoThumbnail(videoBuffer) {
   try {
     await writeFile(tempVideoPath, videoBuffer);
 
-    // Extract frame at 1 second (preserving original aspect ratio)
-    await new Promise((resolve, reject) => {
-      ffmpeg(tempVideoPath)
-        .screenshots({
-          timestamps: ['1'],
-          filename: tempImagePath.split('/').pop(),
-          folder: tmpdir(),
-          size: '1920x?' // Preserve aspect ratio, max width 1920px
-        })
-        .on('end', resolve)
-        .on('error', reject);
-    });
+    // Determine safe seek timestamp (handle short videos <1s gracefully)
+    let durationSeconds = 0;
+    try {
+      const probeOut = execFileSync(FFPROBE_CMD, buildFfprobeJsonArgs(tempVideoPath), {
+        encoding: 'utf8',
+        stdio: 'pipe',
+      });
+      const probe = parseFfprobeJson(probeOut);
+      durationSeconds = parseFloat(probe.format?.duration || 0) || 0;
+    } catch (error) {
+      logStderr('ffprobe error in extractVideoThumbnail (duration probe)', error);
+      durationSeconds = 0;
+    }
+
+    const seekTs = durationSeconds >= 1 ? '1' : (durationSeconds > 0 ? (durationSeconds / 2).toFixed(3) : '0');
+
+    // Extract frame at chosen timestamp (preserving aspect ratio, max width 1920)
+    try {
+      execFileSync(FFMPEG_CMD, buildExtractFrameArgs(tempVideoPath, seekTs, tempImagePath), {
+        stdio: 'pipe',
+      });
+    } catch (error) {
+      logStderr('ffmpeg error in extractVideoThumbnail', error);
+      throw new Error('extractVideoThumbnail: ffmpeg failed');
+    }
 
     // Read the extracted frame
     const frameBuffer = await sharp(tempImagePath).toBuffer();
 
-    // Clean up temp files
-    await unlink(tempVideoPath).catch(() => {});
-    await unlink(tempImagePath).catch(() => {});
+    // Clean up temp files (best-effort)
+    await Promise.allSettled([
+      unlink(tempVideoPath),
+      unlink(tempImagePath),
+    ]);
 
     return frameBuffer;
   } catch (error) {
-    // Clean up on error
-    await unlink(tempVideoPath).catch(() => {});
-    await unlink(tempImagePath).catch(() => {});
+    // Clean up on error (best-effort)
+    await Promise.allSettled([
+      unlink(tempVideoPath),
+      unlink(tempImagePath),
+    ]);
     throw error;
   }
 }
