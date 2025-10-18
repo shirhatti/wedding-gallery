@@ -49,21 +49,23 @@ export default {
           const formData = await request.formData();
           const password = formData.get("password")?.toString() || "";
           const returnTo = formData.get("returnTo")?.toString() || "/";
+          const validReturnTo = isValidReturnTo(returnTo) ? returnTo : "/";
 
           if (env.GALLERY_PASSWORD && password === env.GALLERY_PASSWORD) {
             const headers = new Headers();
             const token = await createAuthToken(env, url.origin);
             headers.set("Set-Cookie", `gallery_auth=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`);
-            headers.set("Location", returnTo);
+            headers.set("Location", validReturnTo);
             return new Response(null, { status: 302, headers });
           }
 
-          return new Response(getLoginPage(true, returnTo), {
+          return new Response(getLoginPage(true, validReturnTo), {
             headers: { "Content-Type": "text/html" }
           });
         }
         const returnTo = url.searchParams.get("returnTo") || "/";
-        return new Response(getLoginPage(false, returnTo), {
+        const validReturnTo = isValidReturnTo(returnTo) ? returnTo : "/";
+        return new Response(getLoginPage(false, validReturnTo), {
           headers: { "Content-Type": "text/html" }
         });
       }
@@ -75,8 +77,9 @@ export default {
         const authValue = match?.[1] ?? "";
         const valid = await validateAuthToken(env, url.origin, authValue);
         if (!valid) {
-          const returnTo = encodeURIComponent(url.pathname + url.search);
-          return Response.redirect(url.origin + "/login?returnTo=" + returnTo, 302);
+          const loginUrl = new URL('/login', url.origin);
+          loginUrl.searchParams.set('returnTo', url.pathname + url.search);
+          return Response.redirect(loginUrl.toString(), 302);
         }
       }
 
@@ -172,6 +175,11 @@ export default {
       mismatch |= ac ^ bc;
     }
     return mismatch === 0;
+  }
+
+  function isValidReturnTo(returnTo: string): boolean {
+    // Must start with / and not start with // (to prevent protocol-relative URLs)
+    return returnTo.startsWith('/') && !returnTo.startsWith('//');
   }
 
   function escapeHtml(str: string): string {

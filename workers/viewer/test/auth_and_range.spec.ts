@@ -68,6 +68,90 @@ describe('Auth and Range handling', () => {
     expect(setCookie as string).toMatch(/gallery_auth=/);
   });
 
+  it('auth flow security: rejects absolute URL redirects (open redirect protection)', async () => {
+    const env = {
+      R2_BUCKET: {} as any,
+      DB: {} as any,
+      CACHE_VERSION: { get: async () => '1' } as any,
+      GALLERY_PASSWORD: 'pw',
+      AUTH_SECRET: 'super-secret',
+    } as any;
+
+    // Attempt login with absolute URL in returnTo -> should redirect to "/" instead
+    const loginReq = new Request('https://example.com/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'password=pw&returnTo=https://evil.com/phishing',
+    });
+    const res = await worker.fetch(loginReq, env);
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('/'); // Should fallback to "/" for security
+  });
+
+  it('auth flow security: rejects protocol-relative URL redirects', async () => {
+    const env = {
+      R2_BUCKET: {} as any,
+      DB: {} as any,
+      CACHE_VERSION: { get: async () => '1' } as any,
+      GALLERY_PASSWORD: 'pw',
+      AUTH_SECRET: 'super-secret',
+    } as any;
+
+    // Attempt login with protocol-relative URL in returnTo -> should redirect to "/" instead
+    const loginReq = new Request('https://example.com/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'password=pw&returnTo=//evil.com/phishing',
+    });
+    const res = await worker.fetch(loginReq, env);
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('/'); // Should fallback to "/" for security
+  });
+
+  it('auth flow security: validates returnTo on GET login page', async () => {
+    const env = {
+      R2_BUCKET: {} as any,
+      DB: {} as any,
+      CACHE_VERSION: { get: async () => '1' } as any,
+      GALLERY_PASSWORD: 'pw',
+      AUTH_SECRET: 'super-secret',
+    } as any;
+
+    // Access login page with malicious returnTo
+    const res = await worker.fetch(
+      new Request('https://example.com/login?returnTo=https://evil.com'),
+      env
+    );
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    // The hidden field should have "/" not the malicious URL
+    expect(body).toContain('value="/"');
+    expect(body).not.toContain('evil.com');
+  });
+
+  it('auth flow security: validates returnTo on failed login', async () => {
+    const env = {
+      R2_BUCKET: {} as any,
+      DB: {} as any,
+      CACHE_VERSION: { get: async () => '1' } as any,
+      GALLERY_PASSWORD: 'pw',
+      AUTH_SECRET: 'super-secret',
+    } as any;
+
+    // Failed login with malicious returnTo
+    const loginReq = new Request('https://example.com/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'password=wrong&returnTo=https://evil.com/phishing',
+    });
+    const res = await worker.fetch(loginReq, env);
+    expect(res.status).toBe(200); // Failed login shows login page again
+    const body = await res.text();
+    // The error page should have "/" not the malicious URL
+    expect(body).toContain('value="/"');
+    expect(body).not.toContain('evil.com');
+  });
+
   it('range request: returns 206 with proper headers', async () => {
     const mockBody = new Uint8Array([2, 3, 4, 5]); // 4 bytes for range 2-5
     const env = {
