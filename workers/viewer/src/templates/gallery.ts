@@ -330,6 +330,7 @@ export function getJavaScript() {
     let lightboxModal = null;
     let hlsInstance = null;
     let cacheVersion = '';
+    let airplayTokenUrl = null; // Store AirPlay URL if generated
     const isMobile = window.matchMedia('(max-width: 768px)').matches;
 
     // Load media from API
@@ -461,6 +462,57 @@ export function getJavaScript() {
         }
     }
     
+    // Generate AirPlay URL for current video
+    async function generateAirPlayUrl(videoKey) {
+        try {
+            const response = await fetch('/api/generate-airplay-url', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ videoKey })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to generate AirPlay URL');
+            }
+
+            const data = await response.json();
+            return data.airplayUrl;
+        } catch (error) {
+            console.error('Error generating AirPlay URL:', error);
+            return null;
+        }
+    }
+
+    // Setup AirPlay detection for video element
+    function setupAirPlayDetection(video, videoKey) {
+        // Reset AirPlay URL when switching videos
+        airplayTokenUrl = null;
+
+        // WebKit AirPlay availability detection
+        video.addEventListener('webkitplaybacktargetavailabilitychanged', async function(event) {
+            if (event.availability === 'available') {
+                // AirPlay device detected - generate token URL if not already done
+                if (!airplayTokenUrl) {
+                    const currentTime = video.currentTime;
+                    const wasPaused = video.paused;
+
+                    airplayTokenUrl = await generateAirPlayUrl(videoKey);
+
+                    if (airplayTokenUrl) {
+                        // Switch to token-based URL for AirPlay
+                        video.src = airplayTokenUrl;
+                        video.currentTime = currentTime;
+
+                        if (!wasPaused) {
+                            video.play().catch(() => {});
+                        }
+                    }
+                }
+            }
+        });
+    }
+
     // Update lightbox media
     async function updateLightbox() {
         const item = mediaItems[currentIndex];
@@ -512,10 +564,16 @@ export function getJavaScript() {
                             video.load();
                         }
                     });
+
+                    // Setup AirPlay detection after HLS is loaded
+                    setupAirPlayDetection(video, item.key);
                 } else if (hlsCheck.ok && video.canPlayType('application/vnd.apple.mpegurl')) {
                     // Native HLS support (Safari)
                     video.src = hlsUrl;
                     video.load();
+
+                    // Setup AirPlay detection for native HLS
+                    setupAirPlayDetection(video, item.key);
                 } else {
                     throw new Error('HLS not available');
                 }
@@ -523,6 +581,9 @@ export function getJavaScript() {
                 // HLS not available, fall back to direct MP4
                 video.src = '/api/file/' + item.key;
                 video.load();
+
+                // Setup AirPlay detection for direct MP4 (though less likely to need token auth)
+                setupAirPlayDetection(video, item.key);
             }
         } else {
             video.style.display = 'none';
