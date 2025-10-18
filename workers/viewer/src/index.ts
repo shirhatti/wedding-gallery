@@ -5,6 +5,7 @@ interface Env {
   R2_BUCKET: R2Bucket;
   DB: D1Database;
   CACHE_VERSION: KVNamespace;
+  AIRPLAY_TOKENS: KVNamespace; // Store AirPlay tokens
   GALLERY_PASSWORD?: string; // Simple password for gallery access
   AUTH_SECRET?: string; // Secret used to sign auth cookie
 }
@@ -86,6 +87,10 @@ export default {
         return handleGetFile(url, env, corsHeaders, request);
       } else if (url.pathname.startsWith("/api/thumbnail/")) {
         return handleGetThumbnail(url, env, corsHeaders, request);
+      } else if (url.pathname === "/api/generate-airplay-url") {
+        return handleGenerateAirPlayUrl(request, env, corsHeaders);
+      } else if (url.pathname.startsWith("/api/airplay/")) {
+        return handleAirPlayHLS(url, env, corsHeaders);
       } else if (url.pathname.startsWith("/api/hls/")) {
         return handleGetHLS(url, env, corsHeaders);
       }
@@ -430,6 +435,125 @@ export default {
       return new Response(object.body, { headers });
     } catch (_error) {
       return new Response("Failed to retrieve HLS file", {
+        status: 500,
+        headers: corsHeaders
+      });
+    }
+  }
+
+  // Generate AirPlay URL with token
+  async function handleGenerateAirPlayUrl(request: Request, env: Env, corsHeaders: Record<string, string>): Promise<Response> {
+    if (request.method !== "POST") {
+      return new Response("Method not allowed", { status: 405 });
+    }
+
+    try {
+      const body = await request.json() as { videoKey: string; currentTime?: number };
+      const { videoKey } = body;
+
+      if (!videoKey) {
+        return new Response(JSON.stringify({ error: "Missing videoKey" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
+
+      // Generate random token
+      const tokenBytes = new Uint8Array(32);
+      crypto.getRandomValues(tokenBytes);
+      const token = Array.from(tokenBytes, byte => byte.toString(16).padStart(2, "0")).join("");
+
+      // Store mapping in KV with 4-hour TTL (14400 seconds)
+      const tokenData = JSON.stringify({
+        videoKey,
+        createdAt: Date.now()
+      });
+
+      await env.AIRPLAY_TOKENS.put(token, tokenData, {
+        expirationTtl: 14400 // 4 hours
+      });
+
+      // Generate AirPlay URL
+      const url = new URL(request.url);
+      const airplayUrl = `${url.origin}/api/airplay/${token}/master.m3u8`;
+
+      return new Response(JSON.stringify({ airplayUrl }), {
+        headers: {
+          "Content-Type": "application/json",
+          ...corsHeaders
+        }
+      });
+    } catch (_error) {
+      return new Response(JSON.stringify({ error: "Failed to generate AirPlay URL" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json", ...corsHeaders }
+      });
+    }
+  }
+
+  // Handle AirPlay HLS requests with token authentication
+  async function handleAirPlayHLS(url: URL, env: Env, corsHeaders: Record<string, string>): Promise<Response> {
+    // URL format: /api/airplay/{token}/master.m3u8 or /api/airplay/{token}/{filename}
+    const pathParts = url.pathname.replace("/api/airplay/", "").split("/");
+
+    if (pathParts.length < 2) {
+      return new Response("Invalid AirPlay path", { status: 400 });
+    }
+
+    const token = pathParts[0];
+    const filename = decodeURIComponent(pathParts[pathParts.length - 1]);
+
+    // Validate token
+    const tokenData = await env.AIRPLAY_TOKENS.get(token);
+    if (!tokenData) {
+      return new Response("Invalid or expired token", { status: 403 });
+    }
+
+    const { videoKey } = JSON.parse(tokenData) as { videoKey: string; createdAt: number };
+    const hlsKey = `hls/${videoKey}/${filename}`;
+
+    try {
+      const object = await env.R2_BUCKET.get(hlsKey);
+
+      if (!object) {
+        return new Response("HLS file not found", { status: 404 });
+      }
+
+      const headers = new Headers();
+      object.writeHttpMetadata(headers);
+
+      // If this is a manifest file, rewrite URLs to include token
+      if (filename.endsWith(".m3u8")) {
+        const manifestText = await object.text();
+        const tokenizedManifest = manifestText
+          .split("\n")
+          .map(line => {
+            // Rewrite segment and playlist URLs to include token
+            if ((line.endsWith(".ts") || line.endsWith(".m3u8")) && !line.startsWith("#")) {
+              return `/api/airplay/${token}/${line}`;
+            }
+            return line;
+          })
+          .join("\n");
+
+        headers.set("Content-Type", "application/vnd.apple.mpegurl");
+        headers.set("Cache-Control", "no-cache"); // Don't cache manifests with tokens
+        Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
+
+        return new Response(tokenizedManifest, { headers });
+      } else if (filename.endsWith(".ts")) {
+        // Serve segment
+        headers.set("Content-Type", "video/MP2T");
+        headers.set("Cache-Control", "public, max-age=2592000"); // Cache segments
+        headers.set("etag", object.httpEtag);
+        Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
+
+        return new Response(object.body, { headers });
+      }
+
+      return new Response("Unsupported file type", { status: 400 });
+    } catch (_error) {
+      return new Response("Failed to retrieve AirPlay HLS file", {
         status: 500,
         headers: corsHeaders
       });
