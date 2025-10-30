@@ -441,8 +441,36 @@ export default {
     }
   }
 
+  function tokenizeManifest(content: string, token: string): string {
+    return content
+      .split("\n")
+      .map(line => {
+        if (line.endsWith(".m3u8") || line.endsWith(".ts")) {
+          return `/api/airplay/${token}/${line}`;
+        }
+        return line;
+      })
+      .join("\n");
+  }
+
   async function handleGenerateAirPlayURL(url: URL, env: Env, corsHeaders: Record<string, string>, request: Request): Promise<Response> {
     try {
+      if (env.GALLERY_PASSWORD) {
+        const cookies = request.headers.get("Cookie") || "";
+        const match = cookies.match(/(?:^|;)\s*gallery_auth=([^;]+)/);
+        const authValue = match?.[1] ?? "";
+        const valid = await validateAuthToken(env, url.origin, authValue);
+        if (!valid) {
+          return new Response(JSON.stringify({ error: "Unauthorized" }), {
+            status: 401,
+            headers: {
+              "Content-Type": "application/json",
+              ...corsHeaders
+            }
+          });
+        }
+      }
+
       const body = await request.json() as { videoId: string; currentTime?: number };
       const { videoId } = body;
 
@@ -460,14 +488,14 @@ export default {
 
       const tokenData = JSON.stringify({
         videoId,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        authenticated: true
       });
 
       await env.AIRPLAY_TOKENS.put(token, tokenData, {
         expirationTtl: 14400
       });
 
-      // Return the AirPlay URL
       const airplayUrl = `${url.origin}/api/airplay/${token}/video.m3u8`;
 
       return new Response(JSON.stringify({ airplayUrl }), {
@@ -476,7 +504,8 @@ export default {
           ...corsHeaders
         }
       });
-    } catch (_error) {
+    } catch (error) {
+      console.error("Failed to generate AirPlay URL:", error);
       return new Response(JSON.stringify({ error: "Failed to generate AirPlay URL" }), {
         status: 500,
         headers: {
@@ -489,11 +518,10 @@ export default {
 
   // Handle AirPlay HLS requests with token authentication
   async function handleAirPlayHLS(url: URL, env: Env, corsHeaders: Record<string, string>): Promise<Response> {
-    // URL format: /api/airplay/{token}/video.m3u8 or /api/airplay/{token}/{filename}
     const pathParts = url.pathname.replace("/api/airplay/", "").split("/");
 
-    if (pathParts.length < 2) {
-      return new Response("Invalid AirPlay path", { status: 400 });
+    if (pathParts.length < 2 || !pathParts[0]) {
+      return new Response("Unauthorized", { status: 403 });
     }
 
     const token = pathParts[0];
@@ -501,10 +529,10 @@ export default {
 
     const tokenData = await env.AIRPLAY_TOKENS.get(token);
     if (!tokenData) {
-      return new Response("Invalid or expired token", { status: 403 });
+      return new Response("Unauthorized", { status: 403 });
     }
 
-    const { videoId } = JSON.parse(tokenData) as { videoId: string; createdAt: number };
+    const { videoId } = JSON.parse(tokenData) as { videoId: string; createdAt: number; authenticated: boolean };
 
     // Handle manifest request
     if (filename === "video.m3u8") {
@@ -516,15 +544,7 @@ export default {
       }
 
       const manifestText = await object.text();
-      const tokenizedManifest = manifestText
-        .split("\n")
-        .map(line => {
-          if (line.endsWith(".m3u8") || line.endsWith(".ts")) {
-            return `/api/airplay/${token}/${line}`;
-          }
-          return line;
-        })
-        .join("\n");
+      const tokenizedManifest = tokenizeManifest(manifestText, token);
 
       const headers = new Headers();
       headers.set("Content-Type", "application/vnd.apple.mpegurl");
@@ -544,15 +564,7 @@ export default {
 
     if (filename.endsWith(".m3u8")) {
       const playlistText = await object.text();
-      const tokenizedPlaylist = playlistText
-        .split("\n")
-        .map(line => {
-          if (line.endsWith(".ts")) {
-            return `/api/airplay/${token}/${line}`;
-          }
-          return line;
-        })
-        .join("\n");
+      const tokenizedPlaylist = tokenizeManifest(playlistText, token);
 
       const headers = new Headers();
       headers.set("Content-Type", "application/vnd.apple.mpegurl");
