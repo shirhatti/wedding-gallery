@@ -5,6 +5,7 @@ interface Env {
   R2_BUCKET: R2Bucket;
   DB: D1Database;
   CACHE_VERSION: KVNamespace;
+  AIRPLAY_TOKENS: KVNamespace;
   GALLERY_PASSWORD?: string; // Simple password for gallery access
   AUTH_SECRET?: string; // Secret used to sign auth cookie
 }
@@ -86,6 +87,10 @@ export default {
         return handleGetFile(url, env, corsHeaders, request);
       } else if (url.pathname.startsWith("/api/thumbnail/")) {
         return handleGetThumbnail(url, env, corsHeaders, request);
+      } else if (url.pathname === "/api/generate-airplay-url" && request.method === "POST") {
+        return handleGenerateAirPlayURL(url, env, corsHeaders, request);
+      } else if (url.pathname.startsWith("/api/airplay/")) {
+        return handleAirPlayHLS(url, env, corsHeaders);
       } else if (url.pathname.startsWith("/api/hls/")) {
         return handleGetHLS(url, env, corsHeaders);
       }
@@ -434,4 +439,134 @@ export default {
         headers: corsHeaders
       });
     }
+  }
+
+  async function handleGenerateAirPlayURL(url: URL, env: Env, corsHeaders: Record<string, string>, request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as { videoId: string; currentTime?: number };
+      const { videoId } = body;
+
+      if (!videoId) {
+        return new Response(JSON.stringify({ error: "videoId is required" }), {
+          status: 400,
+          headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders
+          }
+        });
+      }
+
+      const token = crypto.randomUUID();
+
+      const tokenData = JSON.stringify({
+        videoId,
+        createdAt: Date.now()
+      });
+
+      await env.AIRPLAY_TOKENS.put(token, tokenData, {
+        expirationTtl: 14400
+      });
+
+      // Return the AirPlay URL
+      const airplayUrl = `${url.origin}/api/airplay/${token}/video.m3u8`;
+
+      return new Response(JSON.stringify({ airplayUrl }), {
+        headers: {
+          "Content-Type": "application/json",
+          ...corsHeaders
+        }
+      });
+    } catch (_error) {
+      return new Response(JSON.stringify({ error: "Failed to generate AirPlay URL" }), {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+          ...corsHeaders
+        }
+      });
+    }
+  }
+
+  // Handle AirPlay HLS requests with token authentication
+  async function handleAirPlayHLS(url: URL, env: Env, corsHeaders: Record<string, string>): Promise<Response> {
+    // URL format: /api/airplay/{token}/video.m3u8 or /api/airplay/{token}/{filename}
+    const pathParts = url.pathname.replace("/api/airplay/", "").split("/");
+
+    if (pathParts.length < 2) {
+      return new Response("Invalid AirPlay path", { status: 400 });
+    }
+
+    const token = pathParts[0];
+    const filename = pathParts[pathParts.length - 1];
+
+    const tokenData = await env.AIRPLAY_TOKENS.get(token);
+    if (!tokenData) {
+      return new Response("Invalid or expired token", { status: 403 });
+    }
+
+    const { videoId } = JSON.parse(tokenData) as { videoId: string; createdAt: number };
+
+    // Handle manifest request
+    if (filename === "video.m3u8") {
+      const hlsKey = `hls/${videoId}/master.m3u8`;
+      const object = await env.R2_BUCKET.get(hlsKey);
+
+      if (!object) {
+        return new Response("HLS manifest not found", { status: 404 });
+      }
+
+      const manifestText = await object.text();
+      const tokenizedManifest = manifestText
+        .split("\n")
+        .map(line => {
+          if (line.endsWith(".m3u8") || line.endsWith(".ts")) {
+            return `/api/airplay/${token}/${line}`;
+          }
+          return line;
+        })
+        .join("\n");
+
+      const headers = new Headers();
+      headers.set("Content-Type", "application/vnd.apple.mpegurl");
+      headers.set("Cache-Control", "no-cache");
+      Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
+
+      return new Response(tokenizedManifest, { headers });
+    }
+
+    // Handle variant playlist or segment request
+    const hlsKey = `hls/${videoId}/${filename}`;
+    const object = await env.R2_BUCKET.get(hlsKey);
+
+    if (!object) {
+      return new Response("HLS file not found", { status: 404 });
+    }
+
+    if (filename.endsWith(".m3u8")) {
+      const playlistText = await object.text();
+      const tokenizedPlaylist = playlistText
+        .split("\n")
+        .map(line => {
+          if (line.endsWith(".ts")) {
+            return `/api/airplay/${token}/${line}`;
+          }
+          return line;
+        })
+        .join("\n");
+
+      const headers = new Headers();
+      headers.set("Content-Type", "application/vnd.apple.mpegurl");
+      headers.set("Cache-Control", "no-cache");
+      Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
+
+      return new Response(tokenizedPlaylist, { headers });
+    }
+
+    const headers = new Headers();
+    object.writeHttpMetadata(headers);
+    headers.set("Content-Type", "video/MP2T");
+    headers.set("Cache-Control", "public, max-age=2592000");
+    Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
+
+    return new Response(object.body, { headers });
   }

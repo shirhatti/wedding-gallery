@@ -512,10 +512,14 @@ export function getJavaScript() {
                             video.load();
                         }
                     });
+
+                    setupAirPlayDetection(video, item.key);
                 } else if (hlsCheck.ok && video.canPlayType('application/vnd.apple.mpegurl')) {
                     // Native HLS support (Safari)
                     video.src = hlsUrl;
                     video.load();
+                    
+                    setupAirPlayDetection(video, item.key);
                 } else {
                     throw new Error('HLS not available');
                 }
@@ -534,6 +538,81 @@ export function getJavaScript() {
 
         document.getElementById('currentIndex').textContent = currentIndex + 1;
         document.getElementById('totalMedia').textContent = mediaItems.length;
+    }
+
+    // Setup AirPlay detection and token-based URL switching
+    function setupAirPlayDetection(video, videoKey) {
+        const oldListener = video._airplayListener;
+        if (oldListener) {
+            video.removeEventListener('webkitplaybacktargetavailabilitychanged', oldListener);
+        }
+
+        const airplayListener = async function(event) {
+            if (event.availability === 'available') {
+                try {
+                    const response = await fetch('/api/generate-airplay-url', {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            videoId: videoKey,
+                            currentTime: video.currentTime
+                        })
+                    });
+
+                    if (!response.ok) {
+                        console.error('Failed to generate AirPlay URL');
+                        return;
+                    }
+
+                    const data = await response.json();
+                    const airplayUrl = data.airplayUrl;
+
+                    const currentTime = video.currentTime;
+                    const wasPaused = video.paused;
+
+                    // Clean up HLS instance if exists
+                    if (hlsInstance) {
+                        hlsInstance.destroy();
+                        hlsInstance = null;
+                    }
+
+                    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                        // Native HLS support (Safari)
+                        video.src = airplayUrl;
+                        video.currentTime = currentTime;
+                        
+                        if (!wasPaused) {
+                            video.play().catch(() => {});
+                        }
+                    } else if (Hls.isSupported()) {
+                        // Use HLS.js with token URL
+                        hlsInstance = new Hls({
+                            enableWorker: true,
+                            lowLatencyMode: false,
+                            backBufferLength: 90
+                        });
+
+                        hlsInstance.loadSource(airplayUrl);
+                        hlsInstance.attachMedia(video);
+
+                        hlsInstance.on(Hls.Events.MANIFEST_PARSED, function() {
+                            video.currentTime = currentTime;
+                            if (!wasPaused) {
+                                video.play().catch(() => {});
+                            }
+                        });
+                    }
+
+                    console.log('Switched to AirPlay token-based URL');
+                } catch (error) {
+                    console.error('Error setting up AirPlay:', error);
+                }
+            }
+        };
+
+        video._airplayListener = airplayListener;
+        video.addEventListener('webkitplaybacktargetavailabilitychanged', airplayListener);
     }
     
     // Navigate between media items
