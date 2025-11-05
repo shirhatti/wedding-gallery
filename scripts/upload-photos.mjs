@@ -42,6 +42,52 @@ function fileExistsInR2(key) {
   }
 }
 
+/**
+ * Sanitizes a filename for safe database storage and display.
+ * Removes dangerous characters while keeping the filename human-readable.
+ */
+function sanitizeFilename(filename) {
+  if (!filename || typeof filename !== 'string') {
+    return 'unknown';
+  }
+
+  // Extract the extension safely
+  const lastDotIndex = filename.lastIndexOf('.');
+  let baseName = filename;
+  let extension = '';
+
+  if (lastDotIndex > 0 && lastDotIndex < filename.length - 1) {
+    baseName = filename.substring(0, lastDotIndex);
+    extension = filename.substring(lastDotIndex + 1);
+  }
+
+  // Sanitize the base name
+  baseName = baseName
+    .replace(/\.\./g, '') // Remove parent directory references
+    .replace(/[/\\]/g, '') // Remove path separators
+    .replace(/[\x00-\x1f\x7f]/g, '') // Remove control characters
+    .replace(/[<>:"|?*]/g, '') // Remove Windows-forbidden characters
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .replace(/\.+/g, '.') // Collapse multiple dots
+    .trim()
+    .replace(/^[.\s]+|[.\s]+$/g, '') // Remove leading/trailing dots and spaces
+    .substring(0, 200); // Limit length
+
+  // Sanitize the extension
+  extension = extension
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .substring(0, 10)
+    .toLowerCase();
+
+  // If the basename is empty after sanitization, use a default
+  if (!baseName) {
+    baseName = 'upload';
+  }
+
+  // Return the sanitized filename with extension
+  return extension ? `${baseName}.${extension}` : baseName;
+}
+
 async function main() {
   // Get all image files
   const files = readdirSync(PHOTOS_DIR)
@@ -55,6 +101,7 @@ async function main() {
 
   for (const filePath of files) {
     const fileName = filePath.split('/').pop();
+    const sanitizedFileName = sanitizeFilename(fileName);
     const fileHash = hashFile(filePath);
     const fileExt = extname(filePath).slice(1).toLowerCase() || 'jpg';
     const key = `${fileHash}.${fileExt}`;
@@ -109,7 +156,7 @@ async function main() {
           latitude, longitude, altitude,
           metadata, created_at, updated_at
         ) VALUES (
-          ${escape(key)}, ${escape(fileName)}, 'image', ${stats.size}, ${escape(new Date().toISOString())},
+          ${escape(key)}, ${escape(sanitizedFileName)}, 'image', ${stats.size}, ${escape(new Date().toISOString())},
           ${escape(normalize(exif?.DateTimeOriginal))}, ${escape(normalize(exif?.Make))}, ${escape(normalize(exif?.Model))}, ${escape(normalize(exif?.LensModel))},
           ${normalize(exif?.FocalLength) || 'NULL'}, ${normalize(exif?.FNumber) || 'NULL'}, ${normalize(exif?.ExposureTime) || 'NULL'}, ${normalize(exif?.ISO) || 'NULL'},
           ${normalize(exif?.latitude) || 'NULL'}, ${normalize(exif?.longitude) || 'NULL'}, ${normalize(exif?.GPSAltitude) || 'NULL'},

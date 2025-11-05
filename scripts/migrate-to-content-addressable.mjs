@@ -155,15 +155,39 @@ function existsInR2(key) {
 }
 
 /**
+ * Safely escape SQL string values
+ * Note: wrangler d1 execute doesn't support parameterized queries via --file
+ * so we must use defensive escaping
+ */
+function escapeSqlString(str) {
+  if (typeof str !== 'string') {
+    throw new Error('SQL value must be a string');
+  }
+
+  // Escape single quotes by doubling them (SQL standard)
+  // Also validate that the string doesn't contain other SQL-injection patterns
+  const escaped = str.replace(/'/g, "''");
+
+  // Defensive check: detect potential SQL injection attempts
+  // Keys should not contain semicolons, comments, or other SQL syntax
+  if (escaped.includes(';') || escaped.includes('--') || escaped.includes('/*') ||
+      escaped.includes('*/') || escaped.includes('UNION') || escaped.includes('DROP')) {
+    throw new Error(`Potentially unsafe SQL value detected: ${str.substring(0, 50)}`);
+  }
+
+  return `'${escaped}'`;
+}
+
+/**
  * Update database record
  */
 function updateDatabaseKey(oldKey, newKey) {
   const sql = `
-    UPDATE media SET key = '${newKey.replace(/'/g, "''")}'
-    WHERE key = '${oldKey.replace(/'/g, "''")}';
+    UPDATE media SET key = ${escapeSqlString(newKey)}
+    WHERE key = ${escapeSqlString(oldKey)};
 
-    UPDATE pending_thumbnails SET key = '${newKey.replace(/'/g, "''")}'
-    WHERE key = '${oldKey.replace(/'/g, "''")}';
+    UPDATE pending_thumbnails SET key = ${escapeSqlString(newKey)}
+    WHERE key = ${escapeSqlString(oldKey)};
   `;
 
   writeFileSync('/tmp/migrate.sql', sql);

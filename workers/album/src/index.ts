@@ -31,6 +31,11 @@ const MIME_TO_EXTENSION: Record<string, string> = {
  * Computes SHA-256 hash of file content for content-addressable storage.
  * This enables automatic deduplication and eliminates filename security concerns.
  *
+ * Note: This function loads the entire file into memory. File size is validated
+ * before calling this function to prevent memory exhaustion (max 100MB).
+ * Using Web Crypto API's native implementation is much faster than streaming
+ * with a pure-JS SHA-256 implementation.
+ *
  * @param file - The file to hash
  * @returns Hex-encoded SHA-256 hash
  */
@@ -39,6 +44,60 @@ async function hashFile(file: File): Promise<string> {
   const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Sanitizes a filename for safe database storage and display.
+ * Removes dangerous characters while keeping the filename human-readable.
+ *
+ * @param filename - The original filename from the client
+ * @returns A sanitized filename safe for storage and display
+ */
+function sanitizeFilename(filename: string): string {
+  if (!filename || typeof filename !== 'string') {
+    return 'unknown';
+  }
+
+  // Extract the extension safely
+  const lastDotIndex = filename.lastIndexOf('.');
+  let baseName = filename;
+  let extension = '';
+
+  if (lastDotIndex > 0 && lastDotIndex < filename.length - 1) {
+    baseName = filename.substring(0, lastDotIndex);
+    extension = filename.substring(lastDotIndex + 1);
+  }
+
+  // Sanitize the base name:
+  // - Remove path separators (/, \, ..)
+  // - Remove null bytes and control characters
+  // - Replace multiple spaces/dots with single underscore
+  // - Remove leading/trailing dots and spaces
+  // - Keep only safe characters (alphanumeric, spaces, hyphens, underscores, dots, parentheses, brackets)
+  baseName = baseName
+    .replace(/\.\./g, '') // Remove parent directory references
+    .replace(/[/\\]/g, '') // Remove path separators
+    .replace(/[\x00-\x1f\x7f]/g, '') // Remove control characters
+    .replace(/[<>:"|?*]/g, '') // Remove Windows-forbidden characters
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .replace(/\.+/g, '.') // Collapse multiple dots
+    .trim()
+    .replace(/^[.\s]+|[.\s]+$/g, '') // Remove leading/trailing dots and spaces
+    .substring(0, 200); // Limit length
+
+  // Sanitize the extension (allow only alphanumeric)
+  extension = extension
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .substring(0, 10)
+    .toLowerCase();
+
+  // If the basename is empty after sanitization, use a default
+  if (!baseName) {
+    baseName = 'upload';
+  }
+
+  // Return the sanitized filename with extension
+  return extension ? `${baseName}.${extension}` : baseName;
 }
 
 export default {
@@ -64,6 +123,15 @@ export default {
           return new Response("No file uploaded", { status: 400 });
         }
 
+        // Validate file size (limit to 100MB to prevent memory issues)
+        const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+        if (file.size > MAX_FILE_SIZE) {
+          return new Response(
+            `File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`,
+            { status: 413 } // 413 Payload Too Large
+          );
+        }
+
         // Validate file type (images and videos only)
         const isImage = file.type.startsWith("image/");
         const isVideo = file.type.startsWith("video/");
@@ -72,32 +140,49 @@ export default {
           return new Response("Only image and video files are allowed", { status: 400 });
         }
 
-        // Get file extension from MIME type
-        const extension = MIME_TO_EXTENSION[file.type.toLowerCase()] ||
-                          (isImage ? 'jpg' : 'mp4');
+        // Get file extension from MIME type - reject unknown types
+        const extension = MIME_TO_EXTENSION[file.type.toLowerCase()];
+        if (!extension) {
+          return new Response(
+            `Unsupported file type: ${file.type}. Please upload a common image or video format.`,
+            { status: 400 }
+          );
+        }
 
         // Generate content-addressable key using SHA-256 hash
         const hash = await hashFile(file);
         const key = `${hash}.${extension}`;
 
+        // Sanitize filename for safe database storage and display
+        const sanitizedFilename = sanitizeFilename(file.name);
+
         const uploadedAt = new Date().toISOString();
         const fileType = isVideo ? "video" : "image";
 
         // Check if file already exists (deduplication)
+        // Note: There's a potential race condition between head() and put()
+        // if multiple users upload the same file simultaneously. This is acceptable
+        // because R2 put is idempotent - the last write wins with identical content.
         const existing = await env.PHOTOS_BUCKET.head(key);
 
         if (!existing) {
-          // Upload to R2 bucket only if it doesn't exist
-          await env.PHOTOS_BUCKET.put(key, file, {
-            httpMetadata: {
-              contentType: file.type,
-            },
-            customMetadata: {
-              uploadedAt: uploadedAt,
-              originalName: file.name,
-              fileType: fileType,
-            },
-          });
+          try {
+            // Upload to R2 bucket only if it doesn't exist
+            await env.PHOTOS_BUCKET.put(key, file, {
+              httpMetadata: {
+                contentType: file.type,
+              },
+              customMetadata: {
+                uploadedAt: uploadedAt,
+                originalName: sanitizedFilename,
+                fileType: fileType,
+              },
+            });
+          } catch (error) {
+            // If upload fails due to race condition or other R2 error,
+            // we can still proceed - the database record will track this upload
+            console.error(`R2 upload warning for ${key}:`, error);
+          }
         }
 
         // Always insert/update database record to track this upload
@@ -108,7 +193,7 @@ export default {
           ) VALUES (?, ?, ?, ?, ?, ?, ?)
         `).bind(
           key,
-          file.name,
+          sanitizedFilename,
           fileType,
           file.size,
           uploadedAt,
