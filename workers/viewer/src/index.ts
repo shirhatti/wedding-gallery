@@ -447,6 +447,21 @@ export default {
       return new Response("Method not allowed", { status: 405 });
     }
 
+    // Check authentication if password is set
+    if (env.GALLERY_PASSWORD) {
+      const cookies = request.headers.get("Cookie") || "";
+      const match = cookies.match(/(?:^|;)\s*gallery_auth=([^;]+)/);
+      const authValue = match?.[1] ?? "";
+      const url = new URL(request.url);
+      const valid = await validateAuthToken(env, url.origin, authValue);
+      if (!valid) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
+    }
+
     try {
       const body = await request.json() as { videoKey: string; currentTime?: number };
       const { videoKey } = body;
@@ -483,7 +498,8 @@ export default {
           ...corsHeaders
         }
       });
-    } catch (_error) {
+    } catch (error) {
+      console.error("Failed to generate AirPlay URL:", error);
       return new Response(JSON.stringify({ error: "Failed to generate AirPlay URL" }), {
         status: 500,
         headers: { "Content-Type": "application/json", ...corsHeaders }
@@ -552,7 +568,8 @@ export default {
       }
 
       return new Response("Unsupported file type", { status: 400 });
-    } catch (_error) {
+    } catch (error) {
+      console.error("Failed to retrieve AirPlay HLS file:", error);
       return new Response("Failed to retrieve AirPlay HLS file", {
         status: 500,
         headers: corsHeaders
