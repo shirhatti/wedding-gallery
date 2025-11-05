@@ -7,14 +7,18 @@
     "init": "bash scripts/init-resources.sh",
     "dev:viewer": "cd workers/viewer && npx wrangler dev",
     "dev:album": "cd workers/album && npx wrangler dev",
+    "dev:pages": "cd pages/gallery && npm run dev",
     "deploy:viewer": "cd workers/viewer && npx wrangler deploy",
     "deploy:album": "cd workers/album && npx wrangler deploy",
-    "deploy:all": "npm run deploy:viewer && npm run deploy:album",
+    "deploy:pages": "cd pages/gallery && npm run build && npx wrangler pages deploy dist",
+    "deploy:all": "npm run deploy:viewer && npm run deploy:album && npm run deploy:pages",
+    "build:pages": "cd pages/gallery && npm run build",
     "test": "vitest",
     "prepare": "husky install"
   },
   "workspaces": [
-    "workers/*"
+    "workers/*",
+    "pages/*"
   ],
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.901.0",

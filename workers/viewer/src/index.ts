@@ -1,5 +1,7 @@
 import { handleHomePage } from "./handlers/home";
 import { handleGetFile } from "./handlers/media";
+import { handleHLSPlaylist } from "./handlers/hls";
+import { signR2Url, getSigningConfig } from "./lib/r2-signer";
 
 interface Env {
   R2_BUCKET: R2Bucket;
@@ -7,6 +9,13 @@ interface Env {
   CACHE_VERSION: KVNamespace;
   GALLERY_PASSWORD?: string; // Simple password for gallery access
   AUTH_SECRET?: string; // Secret used to sign auth cookie
+  // R2 signing credentials (optional)
+  R2_ACCESS_KEY_ID?: string;
+  R2_SECRET_ACCESS_KEY?: string;
+  R2_REGION?: string;
+  R2_BUCKET_NAME?: string;
+  R2_ACCOUNT_ID?: string;
+  PAGES_ORIGIN?: string; // Pages domain for CORS
 }
 
 export default {
@@ -18,11 +27,13 @@ export default {
         throw new Error("AUTH_SECRET must be configured when GALLERY_PASSWORD is set");
       }
 
-      // CORS headers
+      // CORS headers - allow Pages origin or fallback to wildcard
+      const allowedOrigin = env.PAGES_ORIGIN || request.headers.get("Origin") || "*";
       const corsHeaders = {
-        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Origin": allowedOrigin,
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Range, Cookie",
+        "Access-Control-Allow-Credentials": "true",
         "Accept-Ranges": "bytes",
       };
 
@@ -92,6 +103,8 @@ export default {
         return handleGetFile(url, env, corsHeaders, request);
       } else if (url.pathname.startsWith("/api/thumbnail/")) {
         return handleGetThumbnail(url, env, corsHeaders, request);
+      } else if (url.pathname === "/api/hls/playlist") {
+        return handleHLSPlaylist(request, env, corsHeaders);
       } else if (url.pathname.startsWith("/api/hls/")) {
         return handleGetHLS(url, env, corsHeaders);
       }
@@ -324,19 +337,37 @@ export default {
         camera_model: string | null;
       }
 
-      const media = result.results.map((row) => {
+      // Check if pre-signed URLs are enabled
+      const usePresignedUrls = env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY;
+      const signingConfig = usePresignedUrls ? getSigningConfig(env) : null;
+
+      const mediaPromises = result.results.map(async (row) => {
         const r = row as MediaRow;
-        return {
+        const mediaItem: any = {
           key: r.key,
           name: r.filename,
           size: r.size,
           type: r.type,
-          uploaded: r.uploaded_at,
+          uploadedAt: r.uploaded_at,
           dateTaken: r.date_taken,
           cameraMake: r.camera_make,
           cameraModel: r.camera_model,
         };
+
+        // Add pre-signed URLs if signing is configured
+        if (signingConfig) {
+          const thumbnailKey = `thumbnails/${r.key.replace(/\.[^.]+$/, '')}_medium.jpg`;
+
+          mediaItem.urls = {
+            thumbnailMedium: await signR2Url(signingConfig, thumbnailKey, 1800), // 30 min
+            original: await signR2Url(signingConfig, r.key, 1800), // 30 min
+          };
+        }
+
+        return mediaItem;
       });
+
+      const media = await Promise.all(mediaPromises);
 
       return new Response(JSON.stringify({ media }), {
         headers: {
@@ -344,7 +375,8 @@ export default {
           ...corsHeaders
         },
       });
-    } catch (_error) {
+    } catch (error) {
+      console.error('Failed to list media:', error);
       return new Response(JSON.stringify({ error: "Failed to list media" }), {
         status: 500,
         headers: {
