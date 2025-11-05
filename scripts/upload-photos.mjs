@@ -1,11 +1,13 @@
 /**
  * Upload photos to R2 and track them in D1 for thumbnail generation
+ * Uses content-addressable storage (SHA-256) for automatic deduplication
  * Usage: node scripts/upload-photos.mjs <directory>
  */
 
-import { readdirSync, statSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { readdirSync, statSync, writeFileSync, readFileSync } from 'fs';
+import { join, extname } from 'path';
 import { execSync } from 'child_process';
+import { createHash } from 'crypto';
 import exifr from 'exifr';
 
 const PHOTOS_DIR = process.argv[2];
@@ -13,6 +15,31 @@ const PHOTOS_DIR = process.argv[2];
 if (!PHOTOS_DIR) {
   console.error('Usage: node scripts/upload-photos.mjs <directory>');
   process.exit(1);
+}
+
+/**
+ * Computes SHA-256 hash of file content for content-addressable storage
+ */
+function hashFile(filePath) {
+  const fileBuffer = readFileSync(filePath);
+  const hash = createHash('sha256');
+  hash.update(fileBuffer);
+  return hash.digest('hex');
+}
+
+/**
+ * Check if file exists in R2 bucket
+ */
+function fileExistsInR2(key) {
+  try {
+    execSync(`npx wrangler r2 object get wedding-photos-metadata/${key} --remote`, {
+      cwd: 'workers/viewer',
+      stdio: 'pipe'
+    });
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 async function main() {
@@ -28,12 +55,20 @@ async function main() {
 
   for (const filePath of files) {
     const fileName = filePath.split('/').pop();
-    const key = fileName;
+    const fileHash = hashFile(filePath);
+    const fileExt = extname(filePath).slice(1).toLowerCase() || 'jpg';
+    const key = `${fileHash}.${fileExt}`;
 
     try {
-      console.log(`[${uploaded + failed + 1}/${files.length}] Uploading ${fileName}...`);
+      console.log(`[${uploaded + failed + 1}/${files.length}] Processing ${fileName}...`);
 
       const stats = statSync(filePath);
+
+      // Check if file already exists (deduplication)
+      const alreadyExists = fileExistsInR2(key);
+      if (alreadyExists) {
+        console.log(`  ⊚ File already exists (duplicate detected), skipping upload`);
+      }
 
       // Extract EXIF
       let exif = null;
@@ -47,11 +82,14 @@ async function main() {
         console.log('  No EXIF data found');
       }
 
-      // Upload to R2
-      execSync(`npx wrangler r2 object put wedding-photos-metadata/${key} --file="${filePath}" --remote`, {
-        cwd: 'workers/viewer',
-        stdio: 'pipe'
-      });
+      // Upload to R2 only if it doesn't already exist
+      if (!alreadyExists) {
+        execSync(`npx wrangler r2 object put wedding-photos-metadata/${key} --file="${filePath}" --remote`, {
+          cwd: 'workers/viewer',
+          stdio: 'pipe'
+        });
+        console.log(`  ✓ Uploaded to R2 (key: ${key})`);
+      }
 
       // Normalize EXIF values
       const normalize = (val) => {
@@ -79,11 +117,11 @@ async function main() {
         );
       `;
 
-      // Insert into pending_thumbnails table
-      const pendingSql = `
+      // Insert into pending_thumbnails table (only for new files)
+      const pendingSql = !alreadyExists ? `
         INSERT OR IGNORE INTO pending_thumbnails (key, created_at)
         VALUES (${escape(key)}, ${escape(new Date().toISOString())});
-      `;
+      ` : '';
 
       // Write SQL to temp file and execute
       writeFileSync('/tmp/upload.sql', mediaSql + '\n' + pendingSql);
@@ -93,7 +131,10 @@ async function main() {
       });
 
       uploaded++;
-      console.log(`  ✓ Uploaded to R2 and tracked in D1`);
+      console.log(`  ✓ Tracked in D1${!alreadyExists ? ' and queued for thumbnail generation' : ''}`);
+      if (alreadyExists) {
+        console.log(`  → Using content-addressable key: ${key}`);
+      }
     } catch (error) {
       console.error(`  ✗ Failed: ${error.message}`);
       failed++;
