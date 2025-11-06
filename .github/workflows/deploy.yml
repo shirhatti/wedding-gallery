@@ -1,4 +1,4 @@
-name: Deploy to Cloudflare Workers
+name: Deploy to Cloudflare
 
 on:
   push:
@@ -6,9 +6,9 @@ on:
       - release
 
 jobs:
-  deploy:
+  deploy-workers:
     runs-on: ubuntu-latest
-    name: Deploy
+    name: Deploy Workers
     steps:
       - uses: actions/checkout@v4
 
@@ -20,8 +20,42 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Deploy to Cloudflare Workers
-        run: npm run deploy:all
+      - name: Deploy Viewer Worker
+        run: cd workers/viewer && npx wrangler deploy --var PAGES_ORIGIN:https://jessandsourabh.pages.dev
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: f974b5257387abc8b6e9e66734f27ec3
+
+      - name: Deploy Album Worker
+        run: npm run deploy:album
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: f974b5257387abc8b6e9e66734f27ec3
+
+  deploy-pages:
+    runs-on: ubuntu-latest
+    name: Deploy Pages App
+    needs: deploy-workers
+    # Only deploy Pages if the directory exists (after migration PR is merged)
+    if: hashFiles('pages/gallery/package.json') != ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Pages App
+        run: npm run build:pages
+        env:
+          VITE_API_BASE: https://viewer.shirhatti.workers.dev
+
+      - name: Deploy to Cloudflare Pages
+        run: cd pages/gallery && npx wrangler pages deploy dist --project-name=wedding-gallery-pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: f974b5257387abc8b6e9e66734f27ec3

@@ -93,15 +93,12 @@ npm install
 
 ### 2. Configure Environment
 
-Create `.env.development`:
+For local development, set the API base URL when running the dev server:
 ```bash
-VITE_API_BASE=http://localhost:8787
+VITE_API_BASE=http://localhost:8787 npm run dev
 ```
 
-For production, set in Pages dashboard:
-```bash
-VITE_API_BASE=https://your-worker-domain.com
-```
+For production, the `VITE_API_BASE` is set during build in the GitHub Actions workflow (see `.github/workflows/deploy.yml`).
 
 ### 3. Configure Worker Secrets
 

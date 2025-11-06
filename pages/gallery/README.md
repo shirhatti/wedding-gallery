@@ -25,17 +25,19 @@ Modern React frontend for the wedding gallery, built with Vite, React, TypeScrip
 npm install
 ```
 
-2. Copy environment file:
-```bash
-cp .env.example .env.development
-```
-
-3. Start the development server:
+2. Start the development server:
 ```bash
 npm run dev
 ```
 
 The app will be available at `http://localhost:5173`
+
+**Note:** For local development, set the API base URL:
+```bash
+VITE_API_BASE=http://localhost:8787 npm run dev
+```
+
+This points the app to your local Worker running at `http://localhost:8787`.
 
 ### Developing with Local Worker
 
