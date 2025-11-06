@@ -12,7 +12,6 @@ export function Gallery() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
-  const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     loadMedia()
@@ -39,10 +38,6 @@ export function Gallery() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleImageLoad = (key: string) => {
-    setLoadedImages(prev => new Set(prev).add(key))
   }
 
   // Helper to get thumbnail URL - supports both pre-signed URLs and proxy mode
@@ -116,7 +111,6 @@ export function Gallery() {
                 <LazyImage
                   src={getThumbnailUrl(item)}
                   alt={item.name}
-                  onLoad={() => handleImageLoad(item.key)}
                 />
 
                 {/* Video indicator */}

@@ -101,7 +101,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
           video.play().catch(() => {})
         })
 
-        hls.on(Hls.Events.ERROR, (event, data) => {
+        hls.on(Hls.Events.ERROR, (_event, data) => {
           if (data.fatal) {
             console.error('HLS fatal error, falling back to MP4')
             cleanupVideo()
