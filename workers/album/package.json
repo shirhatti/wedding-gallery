@@ -1,16 +1,13 @@
 {
-  "name": "wedding-gallery-processor",
+  "name": "@wedding-gallery/album",
   "version": "1.0.0",
   "private": true,
   "main": "src/index.js",
   "scripts": {
-    "dev": "npx wrangler dev",
-    "deploy": "npx wrangler deploy"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
     "exifr": "^7.1.3"
-  },
-  "devDependencies": {
-    "@cloudflare/workers-types": "^4.0.0"
   }
 }
