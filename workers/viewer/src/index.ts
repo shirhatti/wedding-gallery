@@ -17,6 +17,7 @@ interface Env {
   R2_ACCOUNT_ID?: string;
   PAGES_ORIGIN?: string; // Pages domain for CORS
   ENABLE_PRESIGNED_URLS?: string; // Explicitly enable pre-signed URLs (set to "true")
+  ALLOW_LOCALHOST_CORS?: string; // Set to "true" to allow localhost CORS (for development)
 }
 
 export default {
@@ -28,12 +29,17 @@ export default {
         throw new Error("AUTH_SECRET must be configured when GALLERY_PASSWORD is set");
       }
 
-      // CORS headers - allow multiple origins
+      // CORS headers - safe by default, only allow specific origins when configured
       const requestOrigin = request.headers.get("Origin") || "";
-      const allowedOrigins = [env.PAGES_ORIGIN].filter(Boolean);
+      const allowedOrigins: string[] = [];
 
-      // Only allow localhost origins in local development (when PAGES_ORIGIN is not set)
-      if (!env.PAGES_ORIGIN) {
+      // Allow Pages origin if configured (for production Cloudflare Pages integration)
+      if (env.PAGES_ORIGIN) {
+        allowedOrigins.push(env.PAGES_ORIGIN);
+      }
+
+      // Only allow localhost when explicitly enabled (for development)
+      if (env.ALLOW_LOCALHOST_CORS === "true") {
         allowedOrigins.push(
           "http://localhost:5173",     // Local Vite dev server
           "http://127.0.0.1:5173",     // Alternative localhost
@@ -42,17 +48,19 @@ export default {
       }
 
       // Check if request origin is allowed
-      const allowedOrigin = allowedOrigins.includes(requestOrigin)
-        ? requestOrigin
-        : (allowedOrigins[0] || "*");
+      const isAllowedOrigin = allowedOrigins.includes(requestOrigin);
 
-      const corsHeaders = {
-        "Access-Control-Allow-Origin": allowedOrigin,
+      const corsHeaders: Record<string, string> = {
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Range, Cookie",
-        "Access-Control-Allow-Credentials": "true",
         "Accept-Ranges": "bytes",
       };
+
+      // Only set CORS headers if origin is explicitly allowed
+      if (isAllowedOrigin) {
+        corsHeaders["Access-Control-Allow-Origin"] = requestOrigin;
+        corsHeaders["Access-Control-Allow-Credentials"] = "true";
+      }
 
       // Handle CORS preflight
       if (request.method === "OPTIONS") {

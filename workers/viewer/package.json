@@ -4,7 +4,8 @@
   "private": true,
   "main": "src/index.js",
   "scripts": {
-    "dev": "npx wrangler dev",
+    "dev": "npx wrangler dev --var ALLOW_LOCALHOST_CORS:true",
+    "dev:remote": "npx wrangler dev --var ALLOW_LOCALHOST_CORS:true --remote",    
     "deploy": "npx wrangler deploy"
   },
   "devDependencies": {
