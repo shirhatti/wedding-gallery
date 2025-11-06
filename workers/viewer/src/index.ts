@@ -179,7 +179,8 @@ export default {
 
   function isValidReturnTo(returnTo: string): boolean {
     // Must start with / and not start with // (to prevent protocol-relative URLs)
-    return returnTo.startsWith('/') && !returnTo.startsWith('//');
+    // Must not contain : to prevent javascript:, data:, and other protocol handlers
+    return returnTo.startsWith('/') && !returnTo.startsWith('//') && !returnTo.includes(':');
   }
 
   function escapeHtml(str: string): string {

@@ -152,6 +152,87 @@ describe('Auth and Range handling', () => {
     expect(body).not.toContain('evil.com');
   });
 
+  it('auth flow security: rejects javascript: protocol in returnTo', async () => {
+    const env = {
+      R2_BUCKET: {} as any,
+      DB: {} as any,
+      CACHE_VERSION: { get: async () => '1' } as any,
+      GALLERY_PASSWORD: 'pw',
+      AUTH_SECRET: 'super-secret',
+    } as any;
+
+    // Attempt login with javascript: URL in returnTo -> should redirect to "/" instead
+    const loginReq = new Request('https://example.com/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'password=pw&returnTo=/javascript:alert(1)',
+    });
+    const res = await worker.fetch(loginReq, env);
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('/'); // Should fallback to "/" for security
+  });
+
+  it('auth flow security: rejects data: protocol in returnTo', async () => {
+    const env = {
+      R2_BUCKET: {} as any,
+      DB: {} as any,
+      CACHE_VERSION: { get: async () => '1' } as any,
+      GALLERY_PASSWORD: 'pw',
+      AUTH_SECRET: 'super-secret',
+    } as any;
+
+    // Attempt login with data: URL in returnTo -> should redirect to "/" instead
+    const loginReq = new Request('https://example.com/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'password=pw&returnTo=/data:text/html,<script>alert(1)</script>',
+    });
+    const res = await worker.fetch(loginReq, env);
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('/'); // Should fallback to "/" for security
+  });
+
+  it('auth flow security: rejects vbscript: protocol in returnTo', async () => {
+    const env = {
+      R2_BUCKET: {} as any,
+      DB: {} as any,
+      CACHE_VERSION: { get: async () => '1' } as any,
+      GALLERY_PASSWORD: 'pw',
+      AUTH_SECRET: 'super-secret',
+    } as any;
+
+    // Attempt login with vbscript: URL in returnTo -> should redirect to "/" instead
+    const loginReq = new Request('https://example.com/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'password=pw&returnTo=/vbscript:msgbox(1)',
+    });
+    const res = await worker.fetch(loginReq, env);
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('/'); // Should fallback to "/" for security
+  });
+
+  it('auth flow security: validates returnTo with colon on GET login page', async () => {
+    const env = {
+      R2_BUCKET: {} as any,
+      DB: {} as any,
+      CACHE_VERSION: { get: async () => '1' } as any,
+      GALLERY_PASSWORD: 'pw',
+      AUTH_SECRET: 'super-secret',
+    } as any;
+
+    // Access login page with javascript: protocol in returnTo
+    const res = await worker.fetch(
+      new Request('https://example.com/login?returnTo=/javascript:alert(1)'),
+      env
+    );
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    // The hidden field should have "/" not the malicious URL
+    expect(body).toContain('value="/"');
+    expect(body).not.toContain('javascript:');
+  });
+
   it('range request: returns 206 with proper headers', async () => {
     const mockBody = new Uint8Array([2, 3, 4, 5]); // 4 bytes for range 2-5
     const env = {
