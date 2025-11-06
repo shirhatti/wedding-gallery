@@ -81,7 +81,11 @@ export default {
           if (env.GALLERY_PASSWORD && password === env.GALLERY_PASSWORD) {
             const headers = new Headers();
             const token = await createAuthToken(env, url.origin);
-            headers.set("Set-Cookie", `gallery_auth=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`);
+
+            // Only set Secure flag for HTTPS (production), not for local HTTP development
+            const isSecure = url.protocol === 'https:';
+            const secureCookie = isSecure ? '; Secure' : '';
+            headers.set("Set-Cookie", `gallery_auth=${token}; Path=/; HttpOnly${secureCookie}; SameSite=Lax; Max-Age=2592000`);
             headers.set("Location", validReturnTo);
             return new Response(null, { status: 302, headers });
           }
