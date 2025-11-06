@@ -83,8 +83,8 @@ export default {
             const token = await createAuthToken(env, url.origin);
 
             // Only set Secure flag for HTTPS (production), not for local HTTP development
-            const isSecure = url.protocol === 'https:';
-            const secureCookie = isSecure ? '; Secure' : '';
+            const isSecure = url.protocol === "https:";
+            const secureCookie = isSecure ? "; Secure" : "";
             headers.set("Set-Cookie", `gallery_auth=${token}; Path=/; HttpOnly${secureCookie}; SameSite=Lax; Max-Age=2592000`);
             headers.set("Location", validReturnTo);
             return new Response(null, { status: 302, headers });
@@ -119,8 +119,8 @@ export default {
             });
           }
           // For page requests, redirect to login with returnTo parameter
-          const loginUrl = new URL('/login', url.origin);
-          loginUrl.searchParams.set('returnTo', url.pathname + url.search);
+          const loginUrl = new URL("/login", url.origin);
+          loginUrl.searchParams.set("returnTo", url.pathname + url.search);
           return Response.redirect(loginUrl.toString(), 302);
         }
       }
@@ -129,7 +129,7 @@ export default {
       if (url.pathname === "/") {
         return handleHomePage();
       } else if (url.pathname === "/api/media") {
-        return handleListMedia(env, corsHeaders);
+        return handleListMedia(env, corsHeaders, request);
       } else if (url.pathname.startsWith("/api/file/")) {
         return handleGetFile(url, env, corsHeaders, request);
       } else if (url.pathname.startsWith("/api/thumbnail/")) {
@@ -223,7 +223,7 @@ export default {
 
   function isValidReturnTo(returnTo: string): boolean {
     // Must start with / and not start with // (to prevent protocol-relative URLs)
-    return returnTo.startsWith('/') && !returnTo.startsWith('//');
+    return returnTo.startsWith("/") && !returnTo.startsWith("//");
   }
 
   function escapeHtml(str: string): string {
@@ -349,7 +349,7 @@ export default {
   }
 
   // List all media files from D1 database
-  async function handleListMedia(env: Env, corsHeaders: Record<string, string>): Promise<Response> {
+  async function handleListMedia(env: Env, corsHeaders: Record<string, string>, request: Request): Promise<Response> {
     try {
       const result = await env.DB.prepare(`
         SELECT key, filename, type, size, uploaded_at, date_taken, camera_make, camera_model
@@ -368,8 +368,11 @@ export default {
         camera_model: string | null;
       }
 
-      // Check if pre-signed URLs are enabled
-      const usePresignedUrls = env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY;
+      // Only generate pre-signed URLs for cross-origin requests from Pages app
+      // Legacy viewer (same-origin) won't have Origin header or won't match PAGES_ORIGIN
+      const requestOrigin = request.headers.get("Origin") || "";
+      const isPageRequest = env.PAGES_ORIGIN && requestOrigin === env.PAGES_ORIGIN;
+      const usePresignedUrls = isPageRequest && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY;
       const signingConfig = usePresignedUrls ? getSigningConfig(env) : null;
 
       interface MediaItemResponse {
