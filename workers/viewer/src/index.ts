@@ -27,8 +27,24 @@ export default {
         throw new Error("AUTH_SECRET must be configured when GALLERY_PASSWORD is set");
       }
 
-      // CORS headers - allow Pages origin or fallback to wildcard
-      const allowedOrigin = env.PAGES_ORIGIN || request.headers.get("Origin") || "*";
+      // CORS headers - allow multiple origins
+      const requestOrigin = request.headers.get("Origin") || "";
+      const allowedOrigins = [env.PAGES_ORIGIN].filter(Boolean);
+
+      // Only allow localhost origins in local development (when PAGES_ORIGIN is not set)
+      if (!env.PAGES_ORIGIN) {
+        allowedOrigins.push(
+          "http://localhost:5173",     // Local Vite dev server
+          "http://127.0.0.1:5173",     // Alternative localhost
+          "http://localhost:3000"      // Alternative port
+        );
+      }
+
+      // Check if request origin is allowed
+      const allowedOrigin = allowedOrigins.includes(requestOrigin)
+        ? requestOrigin
+        : (allowedOrigins[0] || "*");
+
       const corsHeaders = {
         "Access-Control-Allow-Origin": allowedOrigin,
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -341,9 +357,24 @@ export default {
       const usePresignedUrls = env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY;
       const signingConfig = usePresignedUrls ? getSigningConfig(env) : null;
 
+      interface MediaItemResponse {
+        key: string;
+        name: string;
+        size: number;
+        type: string;
+        uploadedAt: string;
+        dateTaken: string | null;
+        cameraMake: string | null;
+        cameraModel: string | null;
+        urls?: {
+          thumbnailMedium: string;
+          original: string;
+        };
+      }
+
       const mediaPromises = result.results.map(async (row) => {
         const r = row as MediaRow;
-        const mediaItem: any = {
+        const mediaItem: MediaItemResponse = {
           key: r.key,
           name: r.filename,
           size: r.size,
@@ -356,7 +387,7 @@ export default {
 
         // Add pre-signed URLs if signing is configured
         if (signingConfig) {
-          const thumbnailKey = `thumbnails/${r.key.replace(/\.[^.]+$/, '')}_medium.jpg`;
+          const thumbnailKey = `thumbnails/${r.key.replace(/\.[^.]+$/, "")}_medium.jpg`;
 
           mediaItem.urls = {
             thumbnailMedium: await signR2Url(signingConfig, thumbnailKey, 1800), // 30 min
@@ -376,7 +407,7 @@ export default {
         },
       });
     } catch (error) {
-      console.error('Failed to list media:', error);
+      console.error("Failed to list media:", error);
       return new Response(JSON.stringify({ error: "Failed to list media" }), {
         status: 500,
         headers: {
@@ -438,7 +469,7 @@ export default {
       Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
 
       return new Response(object.body, { headers });
-    } catch (_error) {
+    } catch {
       return new Response("Failed to retrieve thumbnail", {
         status: 500,
         headers: corsHeaders
@@ -481,7 +512,7 @@ export default {
       Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
 
       return new Response(object.body, { headers });
-    } catch (_error) {
+    } catch {
       return new Response("Failed to retrieve HLS file", {
         status: 500,
         headers: corsHeaders
