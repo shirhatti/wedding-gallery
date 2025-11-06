@@ -1,5 +1,7 @@
 import { handleHomePage } from "./handlers/home";
 import { handleGetFile } from "./handlers/media";
+import { handleHLSPlaylist } from "./handlers/hls";
+import { signR2Url, getSigningConfig } from "./lib/r2-signer";
 
 interface Env {
   R2_BUCKET: R2Bucket;
@@ -7,6 +9,15 @@ interface Env {
   CACHE_VERSION: KVNamespace;
   GALLERY_PASSWORD?: string; // Simple password for gallery access
   AUTH_SECRET?: string; // Secret used to sign auth cookie
+  // R2 signing credentials (optional)
+  R2_ACCESS_KEY_ID?: string;
+  R2_SECRET_ACCESS_KEY?: string;
+  R2_REGION?: string;
+  R2_BUCKET_NAME?: string;
+  R2_ACCOUNT_ID?: string;
+  PAGES_ORIGIN?: string; // Pages domain for CORS
+  ENABLE_PRESIGNED_URLS?: string; // Explicitly enable pre-signed URLs (set to "true")
+  ALLOW_LOCALHOST_CORS?: string; // Set to "true" to allow localhost CORS (for development)
 }
 
 export default {
@@ -18,13 +29,38 @@ export default {
         throw new Error("AUTH_SECRET must be configured when GALLERY_PASSWORD is set");
       }
 
-      // CORS headers
-      const corsHeaders = {
-        "Access-Control-Allow-Origin": "*",
+      // CORS headers - safe by default, only allow specific origins when configured
+      const requestOrigin = request.headers.get("Origin") || "";
+      const allowedOrigins: string[] = [];
+
+      // Allow Pages origin if configured (for production Cloudflare Pages integration)
+      if (env.PAGES_ORIGIN) {
+        allowedOrigins.push(env.PAGES_ORIGIN);
+      }
+
+      // Only allow localhost when explicitly enabled (for development)
+      if (env.ALLOW_LOCALHOST_CORS === "true") {
+        allowedOrigins.push(
+          "http://localhost:5173",     // Local Vite dev server
+          "http://127.0.0.1:5173",     // Alternative localhost
+          "http://localhost:3000"      // Alternative port
+        );
+      }
+
+      // Check if request origin is allowed
+      const isAllowedOrigin = allowedOrigins.includes(requestOrigin);
+
+      const corsHeaders: Record<string, string> = {
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Range, Cookie",
         "Accept-Ranges": "bytes",
       };
+
+      // Only set CORS headers if origin is explicitly allowed
+      if (isAllowedOrigin) {
+        corsHeaders["Access-Control-Allow-Origin"] = requestOrigin;
+        corsHeaders["Access-Control-Allow-Credentials"] = "true";
+      }
 
       // Handle CORS preflight
       if (request.method === "OPTIONS") {
@@ -54,7 +90,11 @@ export default {
           if (env.GALLERY_PASSWORD && password === env.GALLERY_PASSWORD) {
             const headers = new Headers();
             const token = await createAuthToken(env, url.origin);
-            headers.set("Set-Cookie", `gallery_auth=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`);
+
+            // Only set Secure flag for HTTPS (production), not for local HTTP development
+            const isSecure = url.protocol === "https:";
+            const secureCookie = isSecure ? "; Secure" : "";
+            headers.set("Set-Cookie", `gallery_auth=${token}; Path=/; HttpOnly${secureCookie}; SameSite=Lax; Max-Age=2592000`);
             headers.set("Location", validReturnTo);
             return new Response(null, { status: 302, headers });
           }
@@ -77,8 +117,19 @@ export default {
         const authValue = match?.[1] ?? "";
         const valid = await validateAuthToken(env, url.origin, authValue);
         if (!valid) {
-          const loginUrl = new URL('/login', url.origin);
-          loginUrl.searchParams.set('returnTo', url.pathname + url.search);
+          // For API requests, return 401 with CORS headers so client can handle redirect
+          if (url.pathname.startsWith("/api/")) {
+            return new Response(JSON.stringify({ error: "Unauthorized" }), {
+              status: 401,
+              headers: {
+                "Content-Type": "application/json",
+                ...corsHeaders
+              }
+            });
+          }
+          // For page requests, redirect to login with returnTo parameter
+          const loginUrl = new URL("/login", url.origin);
+          loginUrl.searchParams.set("returnTo", url.pathname + url.search);
           return Response.redirect(loginUrl.toString(), 302);
         }
       }
@@ -92,6 +143,8 @@ export default {
         return handleGetFile(url, env, corsHeaders, request);
       } else if (url.pathname.startsWith("/api/thumbnail/")) {
         return handleGetThumbnail(url, env, corsHeaders, request);
+      } else if (url.pathname === "/api/hls/playlist") {
+        return handleHLSPlaylist(request, env, corsHeaders);
       } else if (url.pathname.startsWith("/api/hls/")) {
         return handleGetHLS(url, env, corsHeaders);
       }
@@ -179,7 +232,7 @@ export default {
 
   function isValidReturnTo(returnTo: string): boolean {
     // Must start with / and not start with // (to prevent protocol-relative URLs)
-    return returnTo.startsWith('/') && !returnTo.startsWith('//');
+    return returnTo.startsWith("/") && !returnTo.startsWith("//");
   }
 
   function escapeHtml(str: string): string {
@@ -324,19 +377,56 @@ export default {
         camera_model: string | null;
       }
 
-      const media = result.results.map((row) => {
+      // Only generate pre-signed URLs when explicitly enabled
+      // Default to OFF to avoid performance regression in legacy viewer
+      const usePresignedUrls =
+        env.ENABLE_PRESIGNED_URLS === "true" &&
+        env.R2_ACCESS_KEY_ID &&
+        env.R2_SECRET_ACCESS_KEY;
+      const signingConfig = usePresignedUrls ? getSigningConfig(env) : null;
+
+      interface MediaItemResponse {
+        key: string;
+        name: string;
+        size: number;
+        type: string;
+        uploadedAt: string;
+        dateTaken: string | null;
+        cameraMake: string | null;
+        cameraModel: string | null;
+        urls?: {
+          thumbnailMedium: string;
+          original: string;
+        };
+      }
+
+      const mediaPromises = result.results.map(async (row) => {
         const r = row as MediaRow;
-        return {
+        const mediaItem: MediaItemResponse = {
           key: r.key,
           name: r.filename,
           size: r.size,
           type: r.type,
-          uploaded: r.uploaded_at,
+          uploadedAt: r.uploaded_at,
           dateTaken: r.date_taken,
           cameraMake: r.camera_make,
           cameraModel: r.camera_model,
         };
+
+        // Add pre-signed URLs if signing is configured
+        if (signingConfig) {
+          const thumbnailKey = `thumbnails/${r.key.replace(/\.[^.]+$/, "")}_medium.jpg`;
+
+          mediaItem.urls = {
+            thumbnailMedium: await signR2Url(signingConfig, thumbnailKey, 1800), // 30 min
+            original: await signR2Url(signingConfig, r.key, 1800), // 30 min
+          };
+        }
+
+        return mediaItem;
       });
+
+      const media = await Promise.all(mediaPromises);
 
       return new Response(JSON.stringify({ media }), {
         headers: {
@@ -344,7 +434,8 @@ export default {
           ...corsHeaders
         },
       });
-    } catch (_error) {
+    } catch (error) {
+      console.error("Failed to list media:", error);
       return new Response(JSON.stringify({ error: "Failed to list media" }), {
         status: 500,
         headers: {
@@ -406,7 +497,7 @@ export default {
       Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
 
       return new Response(object.body, { headers });
-    } catch (_error) {
+    } catch {
       return new Response("Failed to retrieve thumbnail", {
         status: 500,
         headers: corsHeaders
@@ -449,7 +540,7 @@ export default {
       Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
 
       return new Response(object.body, { headers });
-    } catch (_error) {
+    } catch {
       return new Response("Failed to retrieve HLS file", {
         status: 500,
         headers: corsHeaders
