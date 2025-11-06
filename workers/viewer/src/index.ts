@@ -104,6 +104,17 @@ export default {
         const authValue = match?.[1] ?? "";
         const valid = await validateAuthToken(env, url.origin, authValue);
         if (!valid) {
+          // For API requests, return 401 with CORS headers so client can handle redirect
+          if (url.pathname.startsWith("/api/")) {
+            return new Response(JSON.stringify({ error: "Unauthorized" }), {
+              status: 401,
+              headers: {
+                "Content-Type": "application/json",
+                ...corsHeaders
+              }
+            });
+          }
+          // For page requests, redirect to login with returnTo parameter
           const loginUrl = new URL('/login', url.origin);
           loginUrl.searchParams.set('returnTo', url.pathname + url.search);
           return Response.redirect(loginUrl.toString(), 302);
