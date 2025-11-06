@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Play } from 'lucide-react'
 import { MediaItem } from '@/types'
 import { Lightbox } from './Lightbox'
+import { LazyImage } from './LazyImage'
 import { cn } from '@/lib/utils'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
@@ -112,15 +113,10 @@ export function Gallery() {
                 )}
               >
                 {/* Thumbnail */}
-                <img
+                <LazyImage
                   src={getThumbnailUrl(item)}
                   alt={item.name}
-                  loading="lazy"
                   onLoad={() => handleImageLoad(item.key)}
-                  className={cn(
-                    "h-full w-full object-cover transition-opacity duration-300",
-                    loadedImages.has(item.key) ? "opacity-100" : "opacity-0"
-                  )}
                 />
 
                 {/* Video indicator */}
