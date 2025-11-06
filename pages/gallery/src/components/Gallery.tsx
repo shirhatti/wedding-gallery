@@ -44,6 +44,16 @@ export function Gallery() {
     setLoadedImages(prev => new Set(prev).add(key))
   }
 
+  // Helper to get thumbnail URL - supports both pre-signed URLs and proxy mode
+  const getThumbnailUrl = (item: MediaItem): string => {
+    if (item.urls?.thumbnailMedium) {
+      // Pre-signed URL mode (when R2 credentials are configured)
+      return item.urls.thumbnailMedium
+    }
+    // Fallback to proxy mode (local dev without R2 credentials)
+    return `${API_BASE}/api/thumbnail/${item.key}?size=medium`
+  }
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-zinc-900">
@@ -103,7 +113,7 @@ export function Gallery() {
               >
                 {/* Thumbnail */}
                 <img
-                  src={item.urls.thumbnailMedium}
+                  src={getThumbnailUrl(item)}
                   alt={item.name}
                   loading="lazy"
                   onLoad={() => handleImageLoad(item.key)}

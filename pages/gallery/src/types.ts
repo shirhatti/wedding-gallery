@@ -4,7 +4,7 @@ export interface MediaItem {
   type: 'image' | 'video'
   size: number
   uploadedAt: string
-  urls: {
+  urls?: {
     thumbnailMedium: string
     original: string
     hlsPlaylist?: string

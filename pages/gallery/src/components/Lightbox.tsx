@@ -21,6 +21,16 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
   const currentItem = media[currentIndex]
   const isVideo = currentItem.type === 'video'
 
+  // Helper to get original URL - supports both pre-signed URLs and proxy mode
+  const getOriginalUrl = (item: MediaItem): string => {
+    if (item.urls?.original) {
+      // Pre-signed URL mode (when R2 credentials are configured)
+      return item.urls.original
+    }
+    // Fallback to proxy mode (local dev without R2 credentials)
+    return `${API_BASE}/api/file/${item.key}`
+  }
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -95,7 +105,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
           if (data.fatal) {
             console.error('HLS fatal error, falling back to MP4')
             cleanupVideo()
-            video.src = currentItem.urls.original
+            video.src = getOriginalUrl(currentItem)
             video.load()
           }
         })
@@ -108,7 +118,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
       }
     } catch (e) {
       // Fall back to direct MP4
-      video.src = currentItem.urls.original
+      video.src = getOriginalUrl(currentItem)
       video.load()
     }
   }
@@ -168,7 +178,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
           />
         ) : (
           <img
-            src={currentItem.urls.original}
+            src={getOriginalUrl(currentItem)}
             alt={currentItem.name}
             className="max-h-[90vh] max-w-full object-contain"
           />
