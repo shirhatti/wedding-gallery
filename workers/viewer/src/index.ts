@@ -16,6 +16,7 @@ interface Env {
   R2_BUCKET_NAME?: string;
   R2_ACCOUNT_ID?: string;
   PAGES_ORIGIN?: string; // Pages domain for CORS
+  ENABLE_PRESIGNED_URLS?: string; // Explicitly enable pre-signed URLs (set to "true")
 }
 
 export default {
@@ -129,7 +130,7 @@ export default {
       if (url.pathname === "/") {
         return handleHomePage();
       } else if (url.pathname === "/api/media") {
-        return handleListMedia(env, corsHeaders, request);
+        return handleListMedia(env, corsHeaders);
       } else if (url.pathname.startsWith("/api/file/")) {
         return handleGetFile(url, env, corsHeaders, request);
       } else if (url.pathname.startsWith("/api/thumbnail/")) {
@@ -349,7 +350,7 @@ export default {
   }
 
   // List all media files from D1 database
-  async function handleListMedia(env: Env, corsHeaders: Record<string, string>, request: Request): Promise<Response> {
+  async function handleListMedia(env: Env, corsHeaders: Record<string, string>): Promise<Response> {
     try {
       const result = await env.DB.prepare(`
         SELECT key, filename, type, size, uploaded_at, date_taken, camera_make, camera_model
@@ -368,11 +369,12 @@ export default {
         camera_model: string | null;
       }
 
-      // Only generate pre-signed URLs for cross-origin requests from Pages app
-      // Legacy viewer (same-origin) won't have Origin header or won't match PAGES_ORIGIN
-      const requestOrigin = request.headers.get("Origin") || "";
-      const isPageRequest = env.PAGES_ORIGIN && requestOrigin === env.PAGES_ORIGIN;
-      const usePresignedUrls = isPageRequest && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY;
+      // Only generate pre-signed URLs when explicitly enabled
+      // Default to OFF to avoid performance regression in legacy viewer
+      const usePresignedUrls =
+        env.ENABLE_PRESIGNED_URLS === "true" &&
+        env.R2_ACCESS_KEY_ID &&
+        env.R2_SECRET_ACCESS_KEY;
       const signingConfig = usePresignedUrls ? getSigningConfig(env) : null;
 
       interface MediaItemResponse {

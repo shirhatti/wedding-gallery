@@ -103,21 +103,31 @@ Wrangler connects to:
 - **R2 Bucket**: `wedding-photos` (production)
 - **KV Namespace**: Your cache version KV (production)
 
-3. **Set up R2 signing credentials locally (optional):**
+3. **Set up environment variables for Pages app (optional):**
 
-If you want pre-signed URLs to work locally:
+If you want to test the new Pages app with pre-signed URLs locally:
 
 ```bash
-# Create .dev.vars file with your R2 credentials
+# In workers/viewer directory, create .dev.vars file
+cd workers/viewer
 cat > .dev.vars <<EOF
+# Enable pre-signed URLs (required for Pages app)
+ENABLE_PRESIGNED_URLS=true
+
+# R2 signing credentials
 R2_ACCESS_KEY_ID=your_r2_access_key
 R2_SECRET_ACCESS_KEY=your_r2_secret_key
 R2_REGION=auto
 R2_BUCKET_NAME=wedding-photos
 R2_ACCOUNT_ID=your_cloudflare_account_id
+
+# CORS origin for Pages app
 PAGES_ORIGIN=http://localhost:5173
 EOF
+cd ../..
 ```
+
+> **Note:** If you don't set `ENABLE_PRESIGNED_URLS=true`, the Worker will use proxy mode (legacy behavior). The Pages app will still work but will proxy all media through the Worker instead of direct R2 access.
 
 **Get R2 credentials:**
 ```bash
@@ -300,7 +310,10 @@ VITE_API_BASE=http://localhost:8787              # Local Worker
 
 ### Worker Local Dev (`workers/viewer/.dev.vars`)
 ```bash
-# R2 Signing (optional, for pre-signed URLs)
+# Enable pre-signed URLs (set to "true" to enable, default: OFF)
+ENABLE_PRESIGNED_URLS=true
+
+# R2 Signing (required when ENABLE_PRESIGNED_URLS=true)
 R2_ACCESS_KEY_ID=your_key
 R2_SECRET_ACCESS_KEY=your_secret
 R2_REGION=auto
