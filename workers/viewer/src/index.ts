@@ -1,10 +1,12 @@
 import { handleHomePage } from "./handlers/home";
 import { handleGetFile } from "./handlers/media";
 import { handleHLSPlaylist } from "./handlers/hls";
+import { handleLazySegment } from "./handlers/lazy-segments";
 import { signR2Url, getSigningConfig } from "./lib/r2-signer";
 import { isVideoSigningEnabled } from "./lib/cached-url-signer";
 import { batchSignWithCache } from "./lib/batch-r2-signer";
 import { batchRewriteMediaPlaylist } from "./lib/m3u8-handler";
+import { generateProgressiveManifest } from "./lib/progressive-manifest";
 
 interface Env {
   R2_BUCKET: R2Bucket;
@@ -148,6 +150,9 @@ export default {
         return handleGetThumbnail(url, env, corsHeaders, request);
       } else if (url.pathname === "/api/hls/playlist") {
         return handleHLSPlaylist(request, env, corsHeaders);
+      } else if (url.pathname.startsWith("/api/hls-segment/")) {
+        // Lazy segment signing endpoint
+        return handleLazySegment(url, env, corsHeaders);
       } else if (url.pathname.startsWith("/api/hls/")) {
         return handleGetHLS(url, env, corsHeaders);
       }
@@ -557,38 +562,40 @@ export default {
           return new Response(cachedManifest, { headers });
         }
 
-        // Cache miss - generate manifest with batch signing using robust M3U8 parser
+        // Cache miss - use progressive delivery for fast TTFB
         const manifestContent = await object.text();
         const signingConfig = getSigningConfig(env);
 
-        // Use robust M3U8 parser with batch signing
-        const rewrittenManifest = await batchRewriteMediaPlaylist(
+        // Progressive manifest delivery: stream first 5 segments immediately
+        // while signing remaining in background
+        const manifestStream = await generateProgressiveManifest(
           manifestContent,
-          async (segmentUris) => {
-            // Prepend HLS path to all segment URIs
-            const fullKeys = segmentUris.map(uri => `hls/${videoKey}/${uri}`);
+          {
+            initialSegments: 5, // Sign and stream first 5 segments immediately (~20s of video)
+            batchSignUris: async (segmentUris) => {
+              // Prepend HLS path to all segment URIs
+              const fullKeys = segmentUris.map(uri => `hls/${videoKey}/${uri}`);
 
-            // Batch sign all segments with KV caching (4-hour TTL)
-            return await batchSignWithCache(
-              env.CACHE_VERSION,
-              signingConfig,
-              fullKeys,
-              14400 // 4 hours
-            );
+              // Batch sign all segments with KV caching (4-hour TTL)
+              return await batchSignWithCache(
+                env.CACHE_VERSION,
+                signingConfig,
+                fullKeys,
+                14400 // 4 hours
+              );
+            }
           }
         );
 
-        // Cache the entire manifest (90% of 4-hour TTL)
-        const cacheTtl = Math.floor(14400 * 0.9);
-        await env.CACHE_VERSION.put(manifestCacheKey, rewrittenManifest, {
-          expirationTtl: cacheTtl
-        });
+        // Note: We can't cache the streamed response directly
+        // But individual segment URLs are cached in KV, so second request
+        // will be fast anyway (~10ms from KV cache)
 
         headers.set("Cache-Control", "private, max-age=3600");
-        headers.set("X-Cache", "MISS");
+        headers.set("X-Cache", "MISS-PROGRESSIVE");
         Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
 
-        return new Response(rewrittenManifest, { headers });
+        return new Response(manifestStream, { headers });
       }
 
       // For non-manifest files or when signing is disabled, serve directly
