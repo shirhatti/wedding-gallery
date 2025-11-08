@@ -3,9 +3,9 @@ import { isVideoSigningEnabled } from '../lib/cached-url-signer';
 import { batchSignWithCache } from '../lib/batch-r2-signer';
 
 /**
- * Rewrites HLS master playlist to use pre-signed R2 URLs for segments
- * This keeps the Worker out of the video segment delivery path
- * Uses batch signing with KV caching for optimal performance
+ * Handles HLS master playlist requests
+ * Master playlist contains variant references (360p.m3u8, 720p.m3u8, etc.)
+ * These are rewritten to worker URLs (not presigned) for fast response
  */
 export async function handleHLSPlaylist(request: Request, env: any, corsHeaders: Record<string, string>) {
   try {
@@ -22,19 +22,22 @@ export async function handleHLSPlaylist(request: Request, env: any, corsHeaders:
       });
     }
 
-    // Check if video signing is configured
-    // Video signing is always enabled when credentials are available (not behind feature flag)
-    if (!isVideoSigningEnabled(env)) {
-      return new Response(JSON.stringify({ error: 'Pre-signed URLs not configured' }), {
-        status: 500,
+    // Calculate time window for caching (4-hour buckets)
+    const timeWindow = Math.floor(Date.now() / 1000 / 14400);
+    const manifestCacheKey = `manifest:master:${videoKey}:${timeWindow}`;
+
+    // Check manifest cache (fastest path - single KV read)
+    const cachedManifest = await env.CACHE_VERSION.get(manifestCacheKey);
+    if (cachedManifest) {
+      return new Response(cachedManifest, {
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/vnd.apple.mpegurl',
+          'Cache-Control': 'private, max-age=3600',
+          'X-Cache': 'HIT',
           ...corsHeaders,
         },
       });
     }
-
-    const signingConfig = getSigningConfig(env);
 
     // Fetch the HLS master playlist from R2
     const playlistKey = `hls/${videoKey}/master.m3u8`;
@@ -52,41 +55,35 @@ export async function handleHLSPlaylist(request: Request, env: any, corsHeaders:
 
     const playlistContent = await playlistObj.text();
 
-    // Parse the playlist and collect all segment keys
+    // Rewrite variant playlist references to worker URLs
+    // Master playlist contains references like "360p.m3u8", "720p.m3u8"
+    // These should point to /api/hls/{videoKey}/{variant}.m3u8, not R2
     const lines = playlistContent.split('\n');
-    const segmentIndices: number[] = [];
-    const segmentKeys: string[] = [];
-
-    lines.forEach((line, index) => {
+    const rewrittenLines = lines.map(line => {
       // Skip comments and empty lines
-      if (!line.startsWith('#') && line.trim() !== '') {
-        segmentIndices.push(index);
-        segmentKeys.push(`hls/${videoKey}/${line.trim()}`);
+      if (line.startsWith('#') || line.trim() === '') {
+        return line;
       }
-    });
 
-    // Batch sign all segments with KV caching (4-hour TTL)
-    // This is significantly faster than individual signing on cache misses
-    const signedUrls = await batchSignWithCache(
-      env.CACHE_VERSION,
-      signingConfig,
-      segmentKeys,
-      14400 // 4 hours
-    );
-
-    // Reconstruct playlist with signed URLs
-    const rewrittenLines = [...lines];
-    segmentIndices.forEach((lineIndex, i) => {
-      rewrittenLines[lineIndex] = signedUrls[i];
+      // Variant playlist reference - rewrite to worker URL
+      // e.g., "720p.m3u8" → "/api/hls/video.mp4/720p.m3u8"
+      const variant = line.trim();
+      return `/api/hls/${videoKey}/${variant}`;
     });
 
     const rewrittenPlaylist = rewrittenLines.join('\n');
 
+    // Cache the rewritten manifest (90% of 4-hour TTL)
+    const cacheTtl = Math.floor(14400 * 0.9);
+    await env.CACHE_VERSION.put(manifestCacheKey, rewrittenPlaylist, {
+      expirationTtl: cacheTtl
+    });
+
     return new Response(rewrittenPlaylist, {
       headers: {
         'Content-Type': 'application/vnd.apple.mpegurl',
-        // Cache for 1 hour since URLs are valid for 4 hours
         'Cache-Control': 'private, max-age=3600',
+        'X-Cache': 'MISS',
         ...corsHeaders,
       },
     });

@@ -542,6 +542,21 @@ export default {
       // For .m3u8 manifests, rewrite with pre-signed URLs if video signing is enabled
       // This enables AirPlay to work by providing pre-signed URLs in the manifest
       if (filename.endsWith(".m3u8") && isVideoSigningEnabled(env)) {
+        // Calculate time window for caching (4-hour buckets)
+        const timeWindow = Math.floor(Date.now() / 1000 / 14400);
+        const manifestCacheKey = `manifest:variant:${videoKey}:${filename}:${timeWindow}`;
+
+        // Check manifest cache first (fastest path - single KV read)
+        const cachedManifest = await env.CACHE_VERSION.get(manifestCacheKey);
+        if (cachedManifest) {
+          headers.set("Content-Type", "application/vnd.apple.mpegurl");
+          headers.set("Cache-Control", "private, max-age=3600");
+          headers.set("X-Cache", "HIT");
+          Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
+          return new Response(cachedManifest, { headers });
+        }
+
+        // Cache miss - generate manifest with batch signing
         const manifestContent = await object.text();
         const signingConfig = getSigningConfig(env);
 
@@ -573,7 +588,15 @@ export default {
         });
 
         const rewrittenManifest = rewrittenLines.join('\n');
-        headers.set("Cache-Control", "private, max-age=3600"); // Cache for 1 hour
+
+        // Cache the entire manifest (90% of 4-hour TTL)
+        const cacheTtl = Math.floor(14400 * 0.9);
+        await env.CACHE_VERSION.put(manifestCacheKey, rewrittenManifest, {
+          expirationTtl: cacheTtl
+        });
+
+        headers.set("Cache-Control", "private, max-age=3600");
+        headers.set("X-Cache", "MISS");
         Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
 
         return new Response(rewrittenManifest, { headers });
