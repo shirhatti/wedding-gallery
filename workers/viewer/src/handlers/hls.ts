@@ -1,11 +1,10 @@
-import { getSigningConfig } from '../lib/r2-signer';
-import { isVideoSigningEnabled } from '../lib/cached-url-signer';
-import { batchSignWithCache } from '../lib/batch-r2-signer';
+import { rewriteMasterPlaylist } from '../lib/m3u8-handler';
 
 /**
  * Handles HLS master playlist requests
  * Master playlist contains variant references (360p.m3u8, 720p.m3u8, etc.)
  * These are rewritten to worker URLs (not presigned) for fast response
+ * Uses industry-standard m3u8-parser for robust playlist handling
  */
 export async function handleHLSPlaylist(request: Request, env: any, corsHeaders: Record<string, string>) {
   try {
@@ -55,23 +54,11 @@ export async function handleHLSPlaylist(request: Request, env: any, corsHeaders:
 
     const playlistContent = await playlistObj.text();
 
-    // Rewrite variant playlist references to worker URLs
-    // Master playlist contains references like "360p.m3u8", "720p.m3u8"
-    // These should point to /api/hls/{videoKey}/{variant}.m3u8, not R2
-    const lines = playlistContent.split('\n');
-    const rewrittenLines = lines.map(line => {
-      // Skip comments and empty lines
-      if (line.startsWith('#') || line.trim() === '') {
-        return line;
-      }
-
-      // Variant playlist reference - rewrite to worker URL
-      // e.g., "720p.m3u8" → "/api/hls/video.mp4/720p.m3u8"
-      const variant = line.trim();
-      return `/api/hls/${videoKey}/${variant}`;
+    // Rewrite variant playlist references using robust M3U8 parser
+    // Variant references like "360p.m3u8" become "/api/hls/video.mp4/360p.m3u8"
+    const rewrittenPlaylist = await rewriteMasterPlaylist(playlistContent, {
+      rewriteUri: (uri) => `/api/hls/${videoKey}/${uri}`
     });
-
-    const rewrittenPlaylist = rewrittenLines.join('\n');
 
     // Cache the rewritten manifest (90% of 4-hour TTL)
     const cacheTtl = Math.floor(14400 * 0.9);

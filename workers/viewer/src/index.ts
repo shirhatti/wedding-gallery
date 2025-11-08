@@ -4,6 +4,7 @@ import { handleHLSPlaylist } from "./handlers/hls";
 import { signR2Url, getSigningConfig } from "./lib/r2-signer";
 import { isVideoSigningEnabled } from "./lib/cached-url-signer";
 import { batchSignWithCache } from "./lib/batch-r2-signer";
+import { batchRewriteMediaPlaylist } from "./lib/m3u8-handler";
 
 interface Env {
   R2_BUCKET: R2Bucket;
@@ -556,38 +557,26 @@ export default {
           return new Response(cachedManifest, { headers });
         }
 
-        // Cache miss - generate manifest with batch signing
+        // Cache miss - generate manifest with batch signing using robust M3U8 parser
         const manifestContent = await object.text();
         const signingConfig = getSigningConfig(env);
 
-        // Parse the manifest and collect all segment keys
-        const lines = manifestContent.split('\n');
-        const segmentIndices: number[] = [];
-        const segmentKeys: string[] = [];
+        // Use robust M3U8 parser with batch signing
+        const rewrittenManifest = await batchRewriteMediaPlaylist(
+          manifestContent,
+          async (segmentUris) => {
+            // Prepend HLS path to all segment URIs
+            const fullKeys = segmentUris.map(uri => `hls/${videoKey}/${uri}`);
 
-        lines.forEach((line, index) => {
-          // Skip comments and empty lines
-          if (!line.startsWith('#') && line.trim() !== '') {
-            segmentIndices.push(index);
-            segmentKeys.push(`hls/${videoKey}/${line.trim()}`);
+            // Batch sign all segments with KV caching (4-hour TTL)
+            return await batchSignWithCache(
+              env.CACHE_VERSION,
+              signingConfig,
+              fullKeys,
+              14400 // 4 hours
+            );
           }
-        });
-
-        // Batch sign all segments with KV caching (4-hour TTL)
-        const signedUrls = await batchSignWithCache(
-          env.CACHE_VERSION,
-          signingConfig,
-          segmentKeys,
-          14400 // 4 hours
         );
-
-        // Reconstruct manifest with signed URLs
-        const rewrittenLines = [...lines];
-        segmentIndices.forEach((lineIndex, i) => {
-          rewrittenLines[lineIndex] = signedUrls[i];
-        });
-
-        const rewrittenManifest = rewrittenLines.join('\n');
 
         // Cache the entire manifest (90% of 4-hour TTL)
         const cacheTtl = Math.floor(14400 * 0.9);
