@@ -40,11 +40,21 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Get claude-code-action dependency hash
+        id: action-deps
+        run: |
+          # Download the action's package.json to compute hash
+          ACTION_REF="v1"
+          curl -sL "https://raw.githubusercontent.com/anthropics/claude-code-action/${ACTION_REF}/package.json" -o /tmp/action-package.json
+          HASH=$(sha256sum /tmp/action-package.json | cut -d' ' -f1)
+          echo "hash=${HASH}" >> $GITHUB_OUTPUT
+          echo "Action dependencies hash: ${HASH}"
+
       - name: Cache Bun dependencies
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('**/package.json') }}
+          key: ${{ runner.os }}-bun-${{ steps.action-deps.outputs.hash }}
           restore-keys: |
             ${{ runner.os }}-bun-
 
