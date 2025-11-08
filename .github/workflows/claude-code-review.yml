@@ -35,6 +35,12 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Setup Node.js with npm cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
       - name: Run Claude Code Review
         id: claude-review
         timeout-minutes: 30
