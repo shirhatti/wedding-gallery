@@ -2,6 +2,7 @@ import { handleHomePage } from "./handlers/home";
 import { handleGetFile } from "./handlers/media";
 import { handleHLSPlaylist } from "./handlers/hls";
 import { signR2Url, getSigningConfig } from "./lib/r2-signer";
+import { getCachedSignedUrl, isVideoSigningEnabled } from "./lib/cached-url-signer";
 
 interface Env {
   R2_BUCKET: R2Bucket;
@@ -506,6 +507,8 @@ export default {
   }
 
   // Get HLS files (manifests and segments) from R2
+  // For .m3u8 manifests: rewrites with pre-signed URLs for AirPlay support
+  // For .ts segments: serves directly from R2
   async function handleGetHLS(url: URL, env: Env, corsHeaders: Record<string, string>): Promise<Response> {
     // URL format: /api/hls/{videoKey}/{filename}
     const pathParts = url.pathname.replace("/api/hls/", "").split("/");
@@ -535,6 +538,48 @@ export default {
         headers.set("Content-Type", "video/MP2T");
       }
 
+      // For .m3u8 manifests, rewrite with pre-signed URLs if video signing is enabled
+      // This enables AirPlay to work by providing pre-signed URLs in the manifest
+      if (filename.endsWith(".m3u8") && isVideoSigningEnabled(env)) {
+        const manifestContent = await object.text();
+        const signingConfig = getSigningConfig(env);
+
+        // Parse and rewrite the manifest with pre-signed URLs
+        const lines = manifestContent.split('\n');
+        const rewrittenLines = await Promise.all(
+          lines.map(async (line) => {
+            // Skip comments and empty lines
+            if (line.startsWith('#') || line.trim() === '') {
+              return line;
+            }
+
+            // Rewrite segment/playlist references to pre-signed URLs
+            const segmentKey = `hls/${videoKey}/${line.trim()}`;
+
+            try {
+              // Use 4-hour TTL with KV caching to avoid CPU thrashing
+              const signedUrl = await getCachedSignedUrl(
+                env.CACHE_VERSION,
+                signingConfig,
+                segmentKey,
+                14400 // 4 hours
+              );
+              return signedUrl;
+            } catch (error) {
+              console.error(`Failed to sign segment ${segmentKey}:`, error);
+              return line; // Fallback to original if signing fails
+            }
+          })
+        );
+
+        const rewrittenManifest = rewrittenLines.join('\n');
+        headers.set("Cache-Control", "private, max-age=3600"); // Cache for 1 hour
+        Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
+
+        return new Response(rewrittenManifest, { headers });
+      }
+
+      // For non-manifest files or when signing is disabled, serve directly
       headers.set("Cache-Control", "public, max-age=2592000"); // Cache for 30 days
       headers.set("etag", object.httpEtag);
       Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
