@@ -1,10 +1,11 @@
 import { getSigningConfig } from '../lib/r2-signer';
-import { getCachedSignedUrl, isVideoSigningEnabled } from '../lib/cached-url-signer';
+import { isVideoSigningEnabled } from '../lib/cached-url-signer';
+import { batchSignWithCache } from '../lib/batch-r2-signer';
 
 /**
  * Rewrites HLS master playlist to use pre-signed R2 URLs for segments
  * This keeps the Worker out of the video segment delivery path
- * Uses KV caching with 4-hour TTL to avoid CPU thrashing
+ * Uses batch signing with KV caching for optimal performance
  */
 export async function handleHLSPlaylist(request: Request, env: any, corsHeaders: Record<string, string>) {
   try {
@@ -51,36 +52,33 @@ export async function handleHLSPlaylist(request: Request, env: any, corsHeaders:
 
     const playlistContent = await playlistObj.text();
 
-    // Parse and rewrite the playlist
-    // Replace relative segment paths with absolute pre-signed URLs
-    // Uses KV cache with 4-hour TTL to minimize CPU-intensive signing operations
+    // Parse the playlist and collect all segment keys
     const lines = playlistContent.split('\n');
-    const rewrittenLines = await Promise.all(
-      lines.map(async (line) => {
-        // Skip comments and empty lines
-        if (line.startsWith('#') || line.trim() === '') {
-          return line;
-        }
+    const segmentIndices: number[] = [];
+    const segmentKeys: string[] = [];
 
-        // This is a segment or variant playlist reference
-        // Rewrite it to an absolute pre-signed URL
-        const segmentKey = `hls/${videoKey}/${line.trim()}`;
+    lines.forEach((line, index) => {
+      // Skip comments and empty lines
+      if (!line.startsWith('#') && line.trim() !== '') {
+        segmentIndices.push(index);
+        segmentKeys.push(`hls/${videoKey}/${line.trim()}`);
+      }
+    });
 
-        try {
-          // Use 4-hour TTL with KV caching to avoid CPU thrashing
-          const signedUrl = await getCachedSignedUrl(
-            env.CACHE_VERSION,
-            signingConfig,
-            segmentKey,
-            14400 // 4 hours
-          );
-          return signedUrl;
-        } catch (error) {
-          console.error(`Failed to sign segment ${segmentKey}:`, error);
-          return line; // Fallback to original if signing fails
-        }
-      })
+    // Batch sign all segments with KV caching (4-hour TTL)
+    // This is significantly faster than individual signing on cache misses
+    const signedUrls = await batchSignWithCache(
+      env.CACHE_VERSION,
+      signingConfig,
+      segmentKeys,
+      14400 // 4 hours
     );
+
+    // Reconstruct playlist with signed URLs
+    const rewrittenLines = [...lines];
+    segmentIndices.forEach((lineIndex, i) => {
+      rewrittenLines[lineIndex] = signedUrls[i];
+    });
 
     const rewrittenPlaylist = rewrittenLines.join('\n');
 

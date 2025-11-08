@@ -2,7 +2,8 @@ import { handleHomePage } from "./handlers/home";
 import { handleGetFile } from "./handlers/media";
 import { handleHLSPlaylist } from "./handlers/hls";
 import { signR2Url, getSigningConfig } from "./lib/r2-signer";
-import { getCachedSignedUrl, isVideoSigningEnabled } from "./lib/cached-url-signer";
+import { isVideoSigningEnabled } from "./lib/cached-url-signer";
+import { batchSignWithCache } from "./lib/batch-r2-signer";
 
 interface Env {
   R2_BUCKET: R2Bucket;
@@ -544,33 +545,32 @@ export default {
         const manifestContent = await object.text();
         const signingConfig = getSigningConfig(env);
 
-        // Parse and rewrite the manifest with pre-signed URLs
+        // Parse the manifest and collect all segment keys
         const lines = manifestContent.split('\n');
-        const rewrittenLines = await Promise.all(
-          lines.map(async (line) => {
-            // Skip comments and empty lines
-            if (line.startsWith('#') || line.trim() === '') {
-              return line;
-            }
+        const segmentIndices: number[] = [];
+        const segmentKeys: string[] = [];
 
-            // Rewrite segment/playlist references to pre-signed URLs
-            const segmentKey = `hls/${videoKey}/${line.trim()}`;
+        lines.forEach((line, index) => {
+          // Skip comments and empty lines
+          if (!line.startsWith('#') && line.trim() !== '') {
+            segmentIndices.push(index);
+            segmentKeys.push(`hls/${videoKey}/${line.trim()}`);
+          }
+        });
 
-            try {
-              // Use 4-hour TTL with KV caching to avoid CPU thrashing
-              const signedUrl = await getCachedSignedUrl(
-                env.CACHE_VERSION,
-                signingConfig,
-                segmentKey,
-                14400 // 4 hours
-              );
-              return signedUrl;
-            } catch (error) {
-              console.error(`Failed to sign segment ${segmentKey}:`, error);
-              return line; // Fallback to original if signing fails
-            }
-          })
+        // Batch sign all segments with KV caching (4-hour TTL)
+        const signedUrls = await batchSignWithCache(
+          env.CACHE_VERSION,
+          signingConfig,
+          segmentKeys,
+          14400 // 4 hours
         );
+
+        // Reconstruct manifest with signed URLs
+        const rewrittenLines = [...lines];
+        segmentIndices.forEach((lineIndex, i) => {
+          rewrittenLines[lineIndex] = signedUrls[i];
+        });
 
         const rewrittenManifest = rewrittenLines.join('\n');
         headers.set("Cache-Control", "private, max-age=3600"); // Cache for 1 hour
