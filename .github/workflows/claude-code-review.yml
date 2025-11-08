@@ -53,6 +53,7 @@ jobs:
 
       - name: Cache Bun dependencies
         uses: actions/cache@v4
+        id: cache-bun
         with:
           path: |
             ~/.bun/install/cache
@@ -60,6 +61,19 @@ jobs:
           key: ${{ runner.os }}-bun-claude-${{ steps.action-deps.outputs.hash }}
           restore-keys: |
             ${{ runner.os }}-bun-claude-
+
+      - name: Debug cache status
+        run: |
+          echo "Cache hit: ${{ steps.cache-bun.outputs.cache-hit }}"
+          echo "Cache key: ${{ runner.os }}-bun-claude-${{ steps.action-deps.outputs.hash }}"
+          echo "Bun cache exists: $([ -d ~/.bun/install/cache ] && echo 'yes' || echo 'no')"
+          echo "Claude exists: $([ -d /home/runner/.claude ] && echo 'yes' || echo 'no')"
+          if [ -d ~/.bun/install/cache ]; then
+            echo "Bun cache size: $(du -sh ~/.bun/install/cache 2>/dev/null || echo 'unknown')"
+          fi
+          if [ -d /home/runner/.claude ]; then
+            echo "Claude cache size: $(du -sh /home/runner/.claude 2>/dev/null || echo 'unknown')"
+          fi
 
       - name: Run Claude Code Review
         id: claude-review
