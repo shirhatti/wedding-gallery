@@ -164,16 +164,15 @@ function escapeSqlString(str) {
     throw new Error('SQL value must be a string');
   }
 
-  // Escape single quotes by doubling them (SQL standard)
-  // Also validate that the string doesn't contain other SQL-injection patterns
-  const escaped = str.replace(/'/g, "''");
-
-  // Defensive check: detect potential SQL injection attempts
+  // Defensive check BEFORE escaping: detect potential SQL injection attempts
   // Keys should not contain semicolons, comments, or other SQL syntax
-  if (escaped.includes(';') || escaped.includes('--') || escaped.includes('/*') ||
-      escaped.includes('*/') || escaped.includes('UNION') || escaped.includes('DROP')) {
+  if (str.includes(';') || str.includes('--') || str.includes('/*') ||
+      str.includes('*/') || str.includes('UNION') || str.includes('DROP')) {
     throw new Error(`Potentially unsafe SQL value detected: ${str.substring(0, 50)}`);
   }
+
+  // Escape single quotes by doubling them (SQL standard)
+  const escaped = str.replace(/'/g, "''");
 
   return `'${escaped}'`;
 }

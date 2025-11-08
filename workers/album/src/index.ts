@@ -48,7 +48,7 @@ async function hashFile(file: File): Promise<string> {
 
 /**
  * Sanitizes a filename for safe database storage and display.
- * Removes dangerous characters while keeping the filename human-readable.
+ * Uses a whitelist approach with Unicode normalization to prevent bypasses.
  *
  * @param filename - The original filename from the client
  * @returns A sanitized filename safe for storage and display
@@ -57,6 +57,10 @@ function sanitizeFilename(filename: string): string {
   if (!filename || typeof filename !== 'string') {
     return 'unknown';
   }
+
+  // Normalize Unicode to prevent bypasses (e.g., different representations of the same character)
+  // NFD = Canonical Decomposition - breaks combined characters into base + combining marks
+  filename = filename.normalize('NFD');
 
   // Extract the extension safely
   const lastDotIndex = filename.lastIndexOf('.');
@@ -68,17 +72,11 @@ function sanitizeFilename(filename: string): string {
     extension = filename.substring(lastDotIndex + 1);
   }
 
-  // Sanitize the base name:
-  // - Remove path separators (/, \, ..)
-  // - Remove null bytes and control characters
-  // - Replace multiple spaces/dots with single underscore
-  // - Remove leading/trailing dots and spaces
-  // - Keep only safe characters (alphanumeric, spaces, hyphens, underscores, dots, parentheses, brackets)
+  // Whitelist approach: keep only safe characters
+  // Allow: alphanumeric, spaces, hyphens, underscores, dots, parentheses, brackets
+  // This prevents any path traversal or injection attempts
   baseName = baseName
-    .replace(/\.\./g, '') // Remove parent directory references
-    .replace(/[/\\]/g, '') // Remove path separators
-    .replace(/[\x00-\x1f\x7f]/g, '') // Remove control characters
-    .replace(/[<>:"|?*]/g, '') // Remove Windows-forbidden characters
+    .replace(/[^a-zA-Z0-9\s\-_()\[\].]/g, '') // Keep only whitelisted characters
     .replace(/\s+/g, ' ') // Normalize whitespace
     .replace(/\.+/g, '.') // Collapse multiple dots
     .trim()
@@ -179,9 +177,18 @@ export default {
               },
             });
           } catch (error) {
-            // If upload fails due to race condition or other R2 error,
-            // we can still proceed - the database record will track this upload
-            console.error(`R2 upload warning for ${key}:`, error);
+            // Differentiate between race conditions and actual failures
+            const errorMessage = error instanceof Error ? error.message : String(error);
+
+            // If the error suggests the file now exists (race condition), we can proceed
+            // Otherwise, this is a real failure and we should abort
+            if (!errorMessage.includes('already exists') && !errorMessage.includes('conflict')) {
+              console.error(`R2 upload failed for ${key}:`, error);
+              throw new Error('Failed to upload file to storage');
+            }
+
+            // Log race condition but continue - another upload succeeded
+            console.log(`R2 upload race condition for ${key} - file already exists`);
           }
         }
 

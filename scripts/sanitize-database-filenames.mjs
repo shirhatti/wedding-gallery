@@ -19,12 +19,16 @@ if (DRY_RUN) {
 
 /**
  * Sanitizes a filename for safe database storage and display.
- * Removes dangerous characters while keeping the filename human-readable.
+ * Uses a whitelist approach with Unicode normalization to prevent bypasses.
  */
 function sanitizeFilename(filename) {
   if (!filename || typeof filename !== 'string') {
     return 'unknown';
   }
+
+  // Normalize Unicode to prevent bypasses (e.g., different representations of the same character)
+  // NFD = Canonical Decomposition - breaks combined characters into base + combining marks
+  filename = filename.normalize('NFD');
 
   // Extract the extension safely
   const lastDotIndex = filename.lastIndexOf('.');
@@ -36,19 +40,18 @@ function sanitizeFilename(filename) {
     extension = filename.substring(lastDotIndex + 1);
   }
 
-  // Sanitize the base name
+  // Whitelist approach: keep only safe characters
+  // Allow: alphanumeric, spaces, hyphens, underscores, dots, parentheses, brackets
+  // This prevents any path traversal or injection attempts
   baseName = baseName
-    .replace(/\.\./g, '') // Remove parent directory references
-    .replace(/[/\\]/g, '') // Remove path separators
-    .replace(/[\x00-\x1f\x7f]/g, '') // Remove control characters
-    .replace(/[<>:"|?*]/g, '') // Remove Windows-forbidden characters
+    .replace(/[^a-zA-Z0-9\s\-_()\[\].]/g, '') // Keep only whitelisted characters
     .replace(/\s+/g, ' ') // Normalize whitespace
     .replace(/\.+/g, '.') // Collapse multiple dots
     .trim()
     .replace(/^[.\s]+|[.\s]+$/g, '') // Remove leading/trailing dots and spaces
     .substring(0, 200); // Limit length
 
-  // Sanitize the extension
+  // Sanitize the extension (allow only alphanumeric)
   extension = extension
     .replace(/[^a-zA-Z0-9]/g, '')
     .substring(0, 10)
@@ -71,13 +74,13 @@ function escapeSqlString(str) {
     throw new Error('SQL value must be a string');
   }
 
-  const escaped = str.replace(/'/g, "''");
-
-  // Defensive check for SQL injection attempts
-  if (escaped.includes(';') || escaped.includes('--') || escaped.includes('/*') ||
-      escaped.includes('*/') || escaped.includes('UNION') || escaped.includes('DROP')) {
+  // Defensive check BEFORE escaping for SQL injection attempts
+  if (str.includes(';') || str.includes('--') || str.includes('/*') ||
+      str.includes('*/') || str.includes('UNION') || str.includes('DROP')) {
     throw new Error(`Potentially unsafe SQL value detected: ${str.substring(0, 50)}`);
   }
+
+  const escaped = str.replace(/'/g, "''");
 
   return `'${escaped}'`;
 }
