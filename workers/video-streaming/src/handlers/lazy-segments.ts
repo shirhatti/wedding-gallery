@@ -6,6 +6,7 @@ import type { VideoStreamingEnv } from "../types";
 
 import { getSigningConfig } from "../lib/r2-signer";
 import { getCachedSignedUrl, isVideoSigningEnabled } from "../lib/cached-url-signer";
+import { sanitizeVideoKey, sanitizeFilename } from "../lib/security";
 
 /**
  * Handle lazy segment signing
@@ -34,8 +35,12 @@ export async function handleLazySegment(
       });
     }
 
-    const videoKey = decodeURIComponent(pathParts.slice(0, -1).join("/"));
-    const segmentFile = decodeURIComponent(pathParts[pathParts.length - 1]);
+    const rawVideoKey = decodeURIComponent(pathParts.slice(0, -1).join("/"));
+    const rawSegmentFile = decodeURIComponent(pathParts[pathParts.length - 1]);
+
+    // Sanitize inputs to prevent path traversal attacks
+    const videoKey = sanitizeVideoKey(rawVideoKey);
+    const segmentFile = sanitizeFilename(rawSegmentFile);
     const segmentKey = `hls/${videoKey}/${segmentFile}`;
 
     // Check if video signing is enabled

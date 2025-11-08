@@ -1,4 +1,5 @@
 import { rewriteMasterPlaylist } from "../lib/m3u8-handler";
+import { sanitizeVideoKey } from "../lib/security";
 import type { VideoStreamingEnv } from "../types";
 
 /**
@@ -10,9 +11,9 @@ import type { VideoStreamingEnv } from "../types";
 export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv, corsHeaders: Record<string, string>) {
   try {
     const url = new URL(request.url);
-    const videoKey = url.searchParams.get("key");
+    const rawVideoKey = url.searchParams.get("key");
 
-    if (!videoKey) {
+    if (!rawVideoKey) {
       return new Response(JSON.stringify({ error: "Missing key parameter" }), {
         status: 400,
         headers: {
@@ -21,6 +22,9 @@ export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv
         },
       });
     }
+
+    // Sanitize video key to prevent path traversal attacks
+    const videoKey = sanitizeVideoKey(rawVideoKey);
 
     // Calculate time window for caching (4-hour buckets)
     const timeWindow = Math.floor(Date.now() / 1000 / 14400);

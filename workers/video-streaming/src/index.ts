@@ -9,6 +9,7 @@ import { getSigningConfig } from "./lib/r2-signer";
 import { isVideoSigningEnabled } from "./lib/cached-url-signer";
 import { batchSignWithCache } from "./lib/batch-r2-signer";
 import { generateProgressiveManifest } from "./lib/progressive-manifest";
+import { sanitizeVideoKey, sanitizeFilename } from "./lib/security";
 import type { VideoStreamingEnv } from "./types";
 
 export default {
@@ -60,8 +61,12 @@ async function handleGetHLS(url: URL, env: VideoStreamingEnv, corsHeaders: Recor
     return new Response("Invalid HLS path", { status: 400 });
   }
 
-  const videoKey = decodeURIComponent(pathParts.slice(0, -1).join("/"));
-  const filename = decodeURIComponent(pathParts[pathParts.length - 1]);
+  const rawVideoKey = decodeURIComponent(pathParts.slice(0, -1).join("/"));
+  const rawFilename = decodeURIComponent(pathParts[pathParts.length - 1]);
+
+  // Sanitize inputs to prevent path traversal attacks
+  const videoKey = sanitizeVideoKey(rawVideoKey);
+  const filename = sanitizeFilename(rawFilename);
   const hlsKey = `hls/${videoKey}/${filename}`;
 
   try {
