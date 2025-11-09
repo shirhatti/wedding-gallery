@@ -20,19 +20,37 @@ export function createLocalPrismaClient() {
 /**
  * Batch update helper for collecting Prisma operations
  * Useful for scripts that need to perform many updates
+ *
+ * @param {PrismaClient} prisma - Prisma client instance
+ * @param {Object} options - Configuration options
+ * @param {number} options.maxBatchSize - Maximum operations per transaction (default: 100)
  */
 export class PrismaBatchUpdater {
-  constructor(prisma) {
+  constructor(prisma, options = {}) {
     this.prisma = prisma;
     this.operations = [];
+    this.maxBatchSize = options.maxBatchSize || 100;
   }
 
   /**
    * Add a Prisma operation to the batch
    * @param {Function} operation - Function that returns a Prisma operation
+   * @throws {Error} If batch size exceeds maxBatchSize
    */
   add(operation) {
+    if (this.operations.length >= this.maxBatchSize) {
+      throw new Error(
+        `Batch size limit exceeded (${this.maxBatchSize}). ` +
+        `Call execute() before adding more operations, or increase maxBatchSize.`
+      );
+    }
+
     this.operations.push(operation);
+
+    // Warn when approaching limit
+    if (this.operations.length === Math.floor(this.maxBatchSize * 0.9)) {
+      console.warn(`⚠ Batch approaching limit (${this.operations.length}/${this.maxBatchSize})`);
+    }
   }
 
   /**
