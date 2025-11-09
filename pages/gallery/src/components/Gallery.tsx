@@ -5,6 +5,7 @@ import { MediaItem } from '@/types'
 import { Lightbox } from './Lightbox'
 import { LazyImage } from './LazyImage'
 import { cn } from '@/lib/utils'
+import { LAYOUT_BREAKPOINTS, THUMBNAIL_SIZES } from '@/lib/constants'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
@@ -17,9 +18,9 @@ export function Gallery() {
   // Responsive breakpoints for masonry columns
   const breakpointColumns = {
     default: 5,
-    1536: 4,
-    1024: 3,
-    640: 2
+    [LAYOUT_BREAKPOINTS.LAPTOP]: 4,
+    [LAYOUT_BREAKPOINTS.TABLET]: 3,
+    [LAYOUT_BREAKPOINTS.MOBILE]: 2
   }
 
   useEffect(() => {
@@ -54,13 +55,25 @@ export function Gallery() {
   }
 
   // Helper to get thumbnail URL - supports both pre-signed URLs and proxy mode
-  const getThumbnailUrl = (item: MediaItem): string => {
-    if (item.urls?.thumbnailMedium) {
-      // Pre-signed URL mode (when R2 credentials are configured)
+  // Note: Pre-signed URLs (item.urls) are only generated for 'medium' size thumbnails
+  // to minimize backend processing. For 'small' and 'large' sizes, we always use
+  // the proxy API endpoint which can serve all three sizes on-demand.
+  const getThumbnailUrl = (item: MediaItem, size: 'small' | 'medium' | 'large' = 'medium'): string => {
+    if (size === 'medium' && item.urls?.thumbnailMedium) {
+      // Use pre-signed URL when available (reduces worker load)
       return item.urls.thumbnailMedium
     }
-    // Fallback to proxy mode (local dev without R2 credentials)
-    return `${API_BASE}/api/thumbnail/${item.key}?size=medium`
+    // Fall back to proxy mode for all other cases (local dev or non-medium sizes)
+    return `${API_BASE}/api/thumbnail/${item.key}?size=${size}`
+  }
+
+  // Generate srcset for responsive images
+  const getThumbnailSrcset = (item: MediaItem): string => {
+    return [
+      `${getThumbnailUrl(item, 'small')} 150w`,
+      `${getThumbnailUrl(item, 'medium')} 400w`,
+      `${getThumbnailUrl(item, 'large')} 800w`,
+    ].join(', ')
   }
 
   if (loading) {
@@ -127,7 +140,9 @@ export function Gallery() {
                 {/* Thumbnail with natural aspect ratio */}
                 <div className="relative w-full">
                   <LazyImage
-                    src={getThumbnailUrl(item)}
+                    src={getThumbnailUrl(item, 'medium')}
+                    srcset={getThumbnailSrcset(item)}
+                    sizes={THUMBNAIL_SIZES}
                     alt={item.name}
                     aspectRatio={item.width && item.height ? item.width / item.height : undefined}
                   />

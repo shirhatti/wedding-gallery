@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import Hls from 'hls.js'
 import { MediaItem } from '@/types'
 import { Button } from '@/components/ui/button'
+import { MOBILE_BREAKPOINT, LIGHTBOX_SIZES } from '@/lib/constants'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
@@ -15,12 +16,29 @@ interface LightboxProps {
 export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [authToken, setAuthToken] = useState<string | null>(null)
+  const [imageError, setImageError] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
-  const isMobile = window.matchMedia('(max-width: 768px)').matches
+
+  // Track mobile viewport state and update on resize/rotation
+  const [isMobile, setIsMobile] = useState(() =>
+    window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches
+  )
+
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`)
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
 
   const currentItem = media[currentIndex]
   const isVideo = currentItem.type === 'video'
+
+  // Reset error state when navigating to a new item
+  useEffect(() => {
+    setImageError(false)
+  }, [currentIndex])
 
   // Fetch auth token on mount for HLS URLs (needed for iOS Safari)
   useEffect(() => {
@@ -48,6 +66,33 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
     }
     // Fallback to proxy mode (local dev without R2 credentials)
     return `${API_BASE}/api/file/${encodeURIComponent(item.key)}`
+  }
+
+  // Helper to get thumbnail URL - supports both pre-signed URLs and proxy mode
+  // Uses same logic as Gallery component for consistency
+  const getThumbnailUrl = (item: MediaItem, size: 'small' | 'medium' | 'large' = 'medium'): string => {
+    if (size === 'medium' && item.urls?.thumbnailMedium) {
+      // Use pre-signed URL when available (reduces worker load)
+      return item.urls.thumbnailMedium
+    }
+    // Fall back to proxy mode for all other cases (local dev or non-medium sizes)
+    return `${API_BASE}/api/thumbnail/${item.key}?size=${size}`
+  }
+
+  // Generate srcset for lightbox - use large thumbnail for smaller viewports, original for larger
+  const getLightboxSrcset = (item: MediaItem): string => {
+    const sources = [`${getThumbnailUrl(item, 'large')} 800w`]
+    // Use actual image width if available and valid
+    if (item.width && item.width > 0) {
+      sources.push(`${getOriginalUrl(item)} ${item.width}w`)
+    } else {
+      // Fallback for missing/invalid width metadata
+      // Use 3000w to represent typical modern camera output (2000-6000px range)
+      // This ensures browser selects original for desktop viewing (90vw ≈ 1700px < 3000w)
+      // while mobile still gets 800w thumbnail via explicit 800px sizes cap
+      sources.push(`${getOriginalUrl(item)} 3000w`)
+    }
+    return sources.join(', ')
   }
 
   useEffect(() => {
@@ -201,10 +246,34 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
             className="max-h-[90vh] max-w-full"
             playsInline
           />
+        ) : imageError ? (
+          <div className="flex flex-col items-center justify-center text-zinc-400">
+            <svg
+              className="h-24 w-24 mb-4 opacity-50"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
+            </svg>
+            <p className="text-lg mb-2">Failed to load image</p>
+            <p className="text-sm opacity-75">{currentItem.name}</p>
+          </div>
         ) : (
           <img
             src={getOriginalUrl(currentItem)}
+            srcSet={getLightboxSrcset(currentItem)}
+            sizes={LIGHTBOX_SIZES}
             alt={currentItem.name}
+            onError={() => {
+              setImageError(true)
+              console.error('Failed to load image in lightbox:', currentItem.key)
+            }}
             className="max-h-[90vh] max-w-full object-contain"
           />
         )}
