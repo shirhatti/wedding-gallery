@@ -92,6 +92,9 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
           enableWorker: true,
           lowLatencyMode: false,
           backBufferLength: 90,
+          xhrSetup: (xhr) => {
+            xhr.withCredentials = true
+          },
         })
 
         hlsRef.current = hls
