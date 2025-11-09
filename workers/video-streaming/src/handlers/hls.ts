@@ -1,4 +1,5 @@
 import { sanitizeVideoKey } from "../lib/security";
+import { createPrismaClient } from "../lib/prisma";
 import type { VideoStreamingEnv } from "../types";
 
 /**
@@ -48,12 +49,15 @@ export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv
     if (cachedQualities) {
       qualityLevels = JSON.parse(cachedQualities);
     } else {
-      // Cache miss - query database
-      const result = await env.DB.prepare(
-        "SELECT hls_qualities FROM media WHERE key = ?"
-      ).bind(videoKey).first();
+      // Cache miss - query database using Prisma
+      const prisma = createPrismaClient(env.DB);
 
-      if (!result || !result.hls_qualities) {
+      const mediaEntry = await prisma.media.findUnique({
+        where: { key: videoKey },
+        select: { hlsQualities: true }
+      });
+
+      if (!mediaEntry || !mediaEntry.hlsQualities) {
         return new Response(JSON.stringify({ error: "HLS variants not found in database" }), {
           status: 404,
           headers: {
@@ -63,7 +67,7 @@ export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv
       }
 
       // Parse quality levels from database (stored as JSON array like ["1080p", "360p"])
-      qualityLevels = JSON.parse(result.hls_qualities as string);
+      qualityLevels = JSON.parse(mediaEntry.hlsQualities);
 
       // Cache quality levels indefinitely (they never change)
       await env.VIDEO_CACHE.put(qualitiesCacheKey, JSON.stringify(qualityLevels));

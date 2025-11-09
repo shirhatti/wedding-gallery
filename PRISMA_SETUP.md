@@ -24,7 +24,10 @@ wedding-gallery/
 └── workers/
     ├── viewer/                    # ✅ Migrated to Prisma
     │   └── src/lib/prisma.ts     # Prisma helper for D1 adapter
-    └── album/                     # Ready for migration
+    ├── album/                     # ✅ Migrated to Prisma
+    │   └── src/lib/prisma.ts     # Prisma helper for D1 adapter
+    └── video-streaming/           # ✅ Migrated to Prisma
+        └── src/lib/prisma.ts     # Prisma helper for D1 adapter
 ```
 
 ## Schema Definition
@@ -128,15 +131,102 @@ const media = await prisma.media.findMany({
 ✅ **Composable** - Easily add filters, sorting, pagination
 ✅ **Secure** - No SQL injection vulnerabilities
 
-## Example: Viewer Worker (Migrated)
+## Worker Migration Examples
 
-See `workers/viewer/src/index.ts` for a complete example of Prisma usage.
+All production workers have been migrated to Prisma. Here are the key patterns used:
 
-**Key changes**:
-1. Import Prisma helper
-2. Create client with D1 adapter
-3. Replace raw SQL with Prisma queries
-4. Use camelCase field names (Prisma convention)
+### Viewer Worker (`workers/viewer/src/index.ts`)
+
+**Migration**: List all media with filtering and sorting
+
+**Before**:
+```typescript
+const result = await env.DB.prepare(`
+  SELECT key, filename, type, size, uploaded_at, date_taken, camera_make, camera_model, width, height
+  FROM media
+  ORDER BY COALESCE(date_taken, uploaded_at) ASC
+`).all();
+```
+
+**After**:
+```typescript
+const prisma = createPrismaClient(env.DB);
+const mediaResults = await prisma.media.findMany({
+  select: {
+    key: true, filename: true, type: true, size: true,
+    uploadedAt: true, dateTaken: true, cameraMake: true,
+    cameraModel: true, width: true, height: true,
+  },
+  orderBy: [{ dateTaken: 'asc' }, { uploadedAt: 'asc' }],
+});
+```
+
+### Album Worker (`workers/album/src/index.ts`)
+
+**Migration**: Upload file and create database records
+
+**Before**:
+```typescript
+await env.DB.prepare(`
+  INSERT OR REPLACE INTO media (key, filename, type, size, uploaded_at, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
+`).bind(fileName, file.name, fileType, file.size, uploadedAt, uploadedAt, uploadedAt).run();
+
+await env.DB.prepare(`
+  INSERT OR IGNORE INTO pending_thumbnails (key, created_at)
+  VALUES (?, ?)
+`).bind(fileName, uploadedAt).run();
+```
+
+**After**:
+```typescript
+const prisma = createPrismaClient(env.DB);
+
+await prisma.media.upsert({
+  where: { key: fileName },
+  create: {
+    key: fileName, filename: file.name, type: fileType, size: file.size,
+    uploadedAt: uploadedAt, createdAt: uploadedAt, updatedAt: uploadedAt
+  },
+  update: {
+    filename: file.name, type: fileType, size: file.size,
+    uploadedAt: uploadedAt, updatedAt: uploadedAt
+  }
+});
+
+await prisma.pendingThumbnails.createMany({
+  data: [{ key: fileName, createdAt: uploadedAt }],
+  skipDuplicates: true
+});
+```
+
+### Video Streaming Worker (`workers/video-streaming/src/handlers/hls.ts`)
+
+**Migration**: Query HLS qualities for video
+
+**Before**:
+```typescript
+const result = await env.DB.prepare(
+  "SELECT hls_qualities FROM media WHERE key = ?"
+).bind(videoKey).first();
+```
+
+**After**:
+```typescript
+const prisma = createPrismaClient(env.DB);
+const mediaEntry = await prisma.media.findUnique({
+  where: { key: videoKey },
+  select: { hlsQualities: true }
+});
+```
+
+### Key Migration Patterns
+
+1. **Import Prisma helper** at the top of the file
+2. **Create client** with `createPrismaClient(env.DB)`
+3. **Use camelCase** for field names (Prisma convention vs snake_case in DB)
+4. **Type safety** - TypeScript catches errors at compile time
+5. **Null handling** - Prisma knows which fields are nullable
 
 ## Testing with Prisma
 
@@ -193,16 +283,23 @@ npm test workers/viewer/test
 - [x] Verify bundle size (2.4MB total / 900KB gzipped - well within limits)
 - [x] Validate type safety and developer experience
 
-### Phase 3: 🔄 Gradual Rollout (Next Steps)
-- [ ] Migrate album worker to Prisma
-- [ ] Update thumbnail generation scripts
-- [ ] Migrate dimension extraction scripts
-- [ ] Update video streaming worker (if needed)
+### Phase 3: ✅ Production Workers Migration (Completed)
+- [x] Migrate album worker to Prisma (2424.42 KiB / 895.59 KiB gzipped)
+- [x] Migrate video-streaming worker to Prisma (2482.96 KiB / 907.06 KiB gzipped)
+- [x] All production workers now using type-safe Prisma queries
+- [x] Bundle sizes verified and within limits
 
-### Phase 4: 📋 Cleanup (Future)
+### Phase 4: 📋 Script Migration (Future)
+Scripts use Node.js with wrangler CLI commands and require different approach:
+- [ ] Migrate `generate-thumbnails-from-pending.mjs` to Prisma
+- [ ] Migrate `extract-all-dimensions.mjs` to Prisma
+- [ ] Migrate other maintenance scripts as needed
+- [ ] Consider creating Prisma-based script templates
+
+### Phase 5: 📋 Cleanup (Future)
 - [ ] Remove legacy better-sqlite3 scripts (once fully migrated)
 - [ ] Consolidate database utilities
-- [ ] Update documentation and examples
+- [ ] Create script migration guide
 
 ## Database Operations
 
