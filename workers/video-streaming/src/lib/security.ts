@@ -29,8 +29,10 @@ export function sanitizeVideoKey(key: string): string {
     throw new Error("Invalid video key: null bytes not allowed");
   }
 
-  // Only allow safe characters: alphanumeric, dash, underscore, dot, forward slash
-  const safePattern = /^[a-zA-Z0-9._\-\/]+$/;
+  // Allow alphanumeric, dash, underscore, dot, forward slash, space, and plus
+  // Note: This accepts characters commonly found in uploaded filenames
+  // Path traversal is prevented by the checks above
+  const safePattern = /^[a-zA-Z0-9._\-\/ +]+$/;
   if (!safePattern.test(key)) {
     throw new Error("Invalid video key: contains unsafe characters");
   }
