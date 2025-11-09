@@ -1,0 +1,17 @@
+title: Wedding Gallery Documentation
+description: Serverless wedding photo and video sharing platform on Cloudflare
+theme: jekyll-theme-cayman
+show_downloads: false
+
+# GitHub repository
+repository: shirhatti/wedding-gallery
+
+# Navigation
+header_pages:
+  - README.md
+
+# Markdown settings
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false

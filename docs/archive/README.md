@@ -1,0 +1,52 @@
+# Documentation Archive
+
+This directory contains historical planning documents and technical analyses that were created during development. These documents represent design explorations, optimization strategies, and implementation planning that may or may not have been fully implemented.
+
+## Contents
+
+### Optimization & Performance Analysis
+
+- **[SIGNING_OPTIMIZATION.md](SIGNING_OPTIMIZATION.md)** - R2 presigned URL optimization strategies
+- **[HLS_OPTIMIZATION.md](HLS_OPTIMIZATION.md)** - HLS architecture and TTFB optimization
+- **[OPTIMIZATION_OPTIONS.md](OPTIMIZATION_OPTIONS.md)** - Video signing performance optimization options
+
+### Code Quality & Architecture Planning
+
+- **[CODE_DUPLICATION_ANALYSIS.md](CODE_DUPLICATION_ANALYSIS.md)** - Analysis of duplicate libraries between workers
+- **[WORKER_SEPARATION_PLAN.md](WORKER_SEPARATION_PLAN.md)** - Plan for separating video streaming from media serving
+
+### Historical PR Documentation
+
+- **[PR_DESCRIPTION.md](PR_DESCRIPTION.md)** - Pull request description for presigned URLs feature
+
+## Note on Relevancy
+
+These documents were created during active development (circa October-November 2025) as planning and analysis artifacts. Some of the proposed optimizations and architectures may have been:
+
+- **Implemented** - Features described may now be in production
+- **Partially Implemented** - Some aspects adopted, others deferred
+- **Not Implemented** - Ideas explored but not pursued
+- **Superseded** - Replaced by alternative approaches
+
+For current, authoritative documentation on the implemented system, see:
+
+- [Architecture Overview](../architecture/overview.md) - Current system architecture
+- [HLS Implementation](../architecture/hls-implementation.md) - Implemented video streaming
+- [Pages Migration](../architecture/pages-migration.md) - Completed migration details
+
+## When to Reference These Documents
+
+These archived documents are useful for:
+
+- Understanding historical design decisions
+- Exploring optimization opportunities
+- Learning about alternative approaches considered
+- Planning future enhancements
+
+They should **not** be used as:
+
+- Current implementation documentation
+- Operational runbooks
+- Development setup guides
+
+For current documentation, always refer to the main [documentation index](../README.md).
