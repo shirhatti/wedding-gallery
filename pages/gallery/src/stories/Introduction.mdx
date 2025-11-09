@@ -1,0 +1,66 @@
+import { Meta } from '@storybook/blocks';
+
+<Meta title="Introduction" />
+
+# Wedding Gallery Storybook
+
+Welcome to the Wedding Gallery component library! This Storybook contains interactive examples of all UI components used in the wedding gallery application.
+
+## What is Storybook?
+
+Storybook is a frontend workshop for building UI components and pages in isolation. It helps you:
+
+- **Develop components in isolation** - Build components without worrying about the rest of the app
+- **Test different states** - Visualize all possible states of a component
+- **Document components** - Create living documentation with interactive examples
+- **Speed up development** - Faster iteration on UI without running the full app
+
+## Getting Started
+
+### Running Storybook
+
+```bash
+npm run storybook
+```
+
+This will start Storybook on http://localhost:6006
+
+### Building Storybook
+
+```bash
+npm run build-storybook
+```
+
+This creates a static build in the `storybook-static` directory.
+
+## Component Library
+
+Browse the components in the sidebar:
+
+### UI Components
+- **Button** - Various button styles and sizes
+- **Badge** - Status badges and labels
+- **Card** - Card containers for content
+- **Dialog** - Modal dialogs and overlays
+
+## Design System
+
+This project uses:
+- **Tailwind CSS** for styling
+- **shadcn/ui** as the component foundation
+- **class-variance-authority** for variant management
+- **Lucide React** for icons
+
+## Dark Mode
+
+All components are designed for dark mode by default, matching the wedding gallery aesthetic.
+
+## Contributing
+
+When adding new components:
+1. Create the component in `src/components/`
+2. Add a `.stories.tsx` file alongside it
+3. Document all variants and use cases
+4. Test in different states (disabled, loading, etc.)
+
+Happy coding! 🎨

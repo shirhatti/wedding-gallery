@@ -35,3 +35,6 @@ scripts/debug/
 
 # Playwright MCP files
 .playwright-mcp/**
+
+# Storybook
+storybook-static
