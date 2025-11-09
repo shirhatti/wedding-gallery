@@ -11,8 +11,8 @@ import {
   batchSignWithCache,
   generateProgressiveManifest
 } from "@wedding-gallery/shared-video-lib";
+import { validateAuthToken } from "@wedding-gallery/auth";
 import { sanitizeVideoKey, sanitizeFilename } from "./lib/security";
-import { validateAuthToken } from "./lib/auth";
 import type { VideoStreamingEnv } from "./types";
 
 export default {
@@ -45,7 +45,15 @@ export default {
       const cookies = request.headers.get("Cookie") || "";
       const match = cookies.match(/(?:^|;)\s*gallery_auth=([^;]+)/);
       const authValue = match?.[1] ?? "";
-      const valid = await validateAuthToken(env, url.origin, authValue);
+
+      // Use shared auth library with config adapter
+      const authConfig = {
+        secret: env.AUTH_SECRET || "",
+        cacheVersion: {
+          get: async (key: string) => env.VIDEO_CACHE.get(key)
+        }
+      };
+      const valid = await validateAuthToken(authConfig, url.origin, authValue);
 
       if (!valid) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
