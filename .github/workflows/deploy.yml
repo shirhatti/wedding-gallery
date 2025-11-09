@@ -62,7 +62,7 @@ jobs:
 
       - name: Deploy to Cloudflare Pages (Production)
         if: github.ref == 'refs/heads/release'
-        run: cd pages/gallery && npx wrangler pages deploy dist --project-name=jessandsourabh --branch=production
+        run: cd pages/gallery && npx wrangler pages deploy dist --project-name=jessandsourabh
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: f974b5257387abc8b6e9e66734f27ec3
