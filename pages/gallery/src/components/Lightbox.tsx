@@ -47,7 +47,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
       return item.urls.original
     }
     // Fallback to proxy mode (local dev without R2 credentials)
-    return `${API_BASE}/api/file/${item.key}`
+    return `${API_BASE}/api/file/${encodeURIComponent(item.key)}`
   }
 
   useEffect(() => {
@@ -99,7 +99,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
 
     const video = videoRef.current
     // Append auth token to HLS URL for iOS Safari compatibility
-    let hlsUrl = `${API_BASE}/api/hls/playlist?key=${currentItem.key}`
+    let hlsUrl = `${API_BASE}/api/hls/playlist?key=${encodeURIComponent(currentItem.key)}`
     if (authToken) {
       hlsUrl += `&token=${encodeURIComponent(authToken)}`
     }
