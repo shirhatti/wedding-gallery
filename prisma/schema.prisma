@@ -54,17 +54,19 @@ model Media {
   // Full EXIF metadata (JSON blob)
   metadata String?
 
-  // Timestamps
-  processedAt String  @default("CURRENT_TIMESTAMP") @map("processed_at")
-  createdAt   String  @default("CURRENT_TIMESTAMP") @map("created_at")
-  updatedAt   String  @default("CURRENT_TIMESTAMP") @map("updated_at")
+  // Timestamps (Note: Application code explicitly sets these using toISOString())
+  // The @default values match the SQLite schema but should always be overridden
+  processedAt String? @map("processed_at")
+  createdAt   String  @map("created_at")
+  updatedAt   String  @map("updated_at")
 
   @@map("media")
 }
 
 model PendingThumbnails {
   key       String @id
-  createdAt String @default("CURRENT_TIMESTAMP") @map("created_at")
+  // Note: Application code explicitly sets createdAt using toISOString()
+  createdAt String @map("created_at")
 
   @@map("pending_thumbnails")
 }

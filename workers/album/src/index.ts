@@ -61,12 +61,13 @@ export default {
         const uploadedAt = new Date().toISOString();
         const fileType = isVideo ? "video" : "image";
 
+        // Insert into media table (EXIF will be extracted by thumbnail generation job)
         // Initialize Prisma Client with D1 adapter
         const prisma = createPrismaClient(env.DB);
 
-        // Insert into media table (EXIF will be extracted by thumbnail generation job)
-        // Use upsert to handle duplicate key constraint (replaces INSERT OR REPLACE)
-        await prisma.media.upsert({
+        try {
+          // Use upsert to handle duplicate key constraint (replaces INSERT OR REPLACE)
+          await prisma.media.upsert({
           where: { key: fileName },
           create: {
             key: fileName,
@@ -86,23 +87,26 @@ export default {
           }
         });
 
-        // Add to pending_thumbnails queue for processing
-        // Use createMany with skipDuplicates to handle INSERT OR IGNORE behavior
-        await prisma.pendingThumbnails.createMany({
-          data: [{ key: fileName, createdAt: uploadedAt }],
-          skipDuplicates: true
-        });
+          // Add to pending_thumbnails queue for processing
+          // Use createMany with skipDuplicates to handle INSERT OR IGNORE behavior
+          await prisma.pendingThumbnails.createMany({
+            data: [{ key: fileName, createdAt: uploadedAt }],
+            skipDuplicates: true
+          });
 
-        return new Response(JSON.stringify({
-          success: true,
-          fileName: fileName,
-          fileType: fileType
-        }), {
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-          },
-        });
+          return new Response(JSON.stringify({
+            success: true,
+            fileName: fileName,
+            fileType: fileType
+          }), {
+            headers: {
+              "Content-Type": "application/json",
+              "Access-Control-Allow-Origin": "*",
+            },
+          });
+        } finally {
+          await prisma.$disconnect();
+        }
 
       } catch (error) {
         console.error("Upload error:", error);

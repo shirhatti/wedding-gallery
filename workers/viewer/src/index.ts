@@ -100,10 +100,10 @@ export default {
 
   // List all media files from D1 database using Prisma
   async function handleListMedia(env: Env): Promise<Response> {
-    try {
-      // Initialize Prisma Client with D1 adapter
-      const prisma = createPrismaClient(env.DB);
+    // Initialize Prisma Client with D1 adapter
+    const prisma = createPrismaClient(env.DB);
 
+    try {
       // Query media using Prisma
       const mediaResults = await prisma.media.findMany({
         select: {
@@ -208,6 +208,8 @@ export default {
           "Content-Type": "application/json",
         },
       });
+    } finally {
+      await prisma.$disconnect();
     }
   }
 
