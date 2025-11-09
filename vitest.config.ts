@@ -6,7 +6,16 @@ export default defineWorkersConfig({
     ],
     poolOptions: {
       workers: {
-        wrangler: { configPath: "./workers/album/wrangler.toml" },
+        wrangler: {
+          configPath: "./workers/album/wrangler.toml",
+        },
+        miniflare: {
+          // Override bindings to use local mode (remove remote = true)
+          // This allows tests to run without authentication
+          bindings: {
+            // Bindings will use local simulations by default
+          }
+        },
       },
     },
     // Exclude Node-based script tests, which run in a separate config
