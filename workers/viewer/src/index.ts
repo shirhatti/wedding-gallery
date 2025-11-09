@@ -33,8 +33,10 @@ export default {
       const allowedOrigins: string[] = [];
 
       // Allow Pages origin if configured (for production Cloudflare Pages integration)
+      // Supports comma-separated list of origins for multiple environments
       if (env.PAGES_ORIGIN) {
-        allowedOrigins.push(env.PAGES_ORIGIN);
+        const origins = env.PAGES_ORIGIN.split(",").map(o => o.trim());
+        allowedOrigins.push(...origins);
       }
 
       // Only allow localhost when explicitly enabled (for development)
@@ -47,7 +49,11 @@ export default {
       }
 
       // Check if request origin is allowed
-      const isAllowedOrigin = allowedOrigins.includes(requestOrigin);
+      // Support wildcard subdomains for Cloudflare Pages previews (*.jessandsourabh.pages.dev)
+      const isAllowedOrigin = allowedOrigins.includes(requestOrigin) ||
+        (requestOrigin.startsWith("https://") &&
+         (requestOrigin === "https://jessandsourabh.pages.dev" ||
+          requestOrigin.endsWith(".jessandsourabh.pages.dev")));
 
       const corsHeaders: Record<string, string> = {
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",

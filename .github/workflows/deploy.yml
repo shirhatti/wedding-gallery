@@ -21,7 +21,13 @@ jobs:
         run: npm install
 
       - name: Deploy Viewer Worker
-        run: cd workers/viewer && npx wrangler deploy --var PAGES_ORIGIN:https://jessandsourabh.pages.dev
+        run: cd workers/viewer && npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: f974b5257387abc8b6e9e66734f27ec3
+
+      - name: Deploy Video Streaming Worker
+        run: cd workers/video-streaming && npx wrangler deploy --var PAGES_ORIGIN:https://jessandsourabh.pages.dev
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: f974b5257387abc8b6e9e66734f27ec3
