@@ -105,8 +105,14 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
     }
 
     try {
-      if (Hls.isSupported()) {
-        // Use HLS.js
+      // Prioritize native HLS support on Safari for AirPlay compatibility
+      // AirPlay doesn't work with HLS.js (MSE), so we must use native playback
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Native HLS support (Safari) - uses URL with token and supports AirPlay
+        video.src = hlsUrl
+        video.load()
+      } else if (Hls.isSupported()) {
+        // Use HLS.js for browsers without native HLS support
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
@@ -132,10 +138,6 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
             video.load()
           }
         })
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS support (Safari) - uses URL with token
-        video.src = hlsUrl
-        video.load()
       } else {
         throw new Error('HLS not available')
       }
