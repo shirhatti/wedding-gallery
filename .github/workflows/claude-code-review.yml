@@ -43,20 +43,51 @@ jobs:
       - name: Get claude-code-action dependency hash
         id: action-deps
         run: |
-          # Download the action's package.json to compute hash
+          # Download both package.json files to compute combined hash
           ACTION_REF="v1"
           curl -sL "https://raw.githubusercontent.com/anthropics/claude-code-action/${ACTION_REF}/package.json" -o /tmp/action-package.json
-          HASH=$(sha256sum /tmp/action-package.json | cut -d' ' -f1)
+          curl -sL "https://raw.githubusercontent.com/anthropics/claude-code-action/${ACTION_REF}/base-action/package.json" -o /tmp/base-action-package.json
+          # Combine both files and compute hash
+          HASH=$(cat /tmp/action-package.json /tmp/base-action-package.json | sha256sum | cut -d' ' -f1)
           echo "hash=${HASH}" >> $GITHUB_OUTPUT
           echo "Action dependencies hash: ${HASH}"
 
       - name: Cache Bun dependencies
+        id: cache-bun
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ steps.action-deps.outputs.hash }}
           restore-keys: |
             ${{ runner.os }}-bun-
+
+      - name: Cache Claude Code binary
+        id: cache-claude
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.claude
+          key: ${{ runner.os }}-claude-binary-${{ steps.action-deps.outputs.hash }}
+          restore-keys: |
+            ${{ runner.os }}-claude-binary-
+
+      - name: Debug cache status
+        run: |
+          echo "=== Cache Status ==="
+          echo "Cache key: ${{ runner.os }}-bun-${{ steps.action-deps.outputs.hash }}"
+          echo "Bun cache hit: ${{ steps.cache-bun.outputs.cache-hit }}"
+          echo "Claude cache hit: ${{ steps.cache-claude.outputs.cache-hit }}"
+          echo ""
+          echo "=== Cached Directory Status ==="
+          if [ -d ~/.bun/install/cache ]; then
+            echo "Bun cache exists: $(du -sh ~/.bun/install/cache 2>/dev/null || echo 'empty')"
+          else
+            echo "Bun cache does not exist"
+          fi
+          if [ -d /home/runner/.claude ]; then
+            echo "Claude binary cache exists: $(du -sh /home/runner/.claude 2>/dev/null || echo 'empty')"
+          else
+            echo "Claude binary cache does not exist"
+          fi
 
       - name: Run Claude Code Review
         id: claude-review
