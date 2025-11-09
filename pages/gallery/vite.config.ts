@@ -14,4 +14,25 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
   },
+  server: {
+    proxy: {
+      // Route video streaming endpoints to video-streaming worker
+      '/api/hls': {
+        target: 'http://localhost:8788',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/api/hls-segment': {
+        target: 'http://localhost:8788',
+        changeOrigin: true,
+        secure: false,
+      },
+      // Route all other API endpoints to viewer worker
+      '/api': {
+        target: 'http://localhost:8787',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
 })

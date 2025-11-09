@@ -5,7 +5,6 @@ import { MediaItem } from '@/types'
 import { Button } from '@/components/ui/button'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
-const VIDEO_API_BASE = import.meta.env.VITE_VIDEO_API_BASE || API_BASE
 
 interface LightboxProps {
   media: MediaItem[]
@@ -80,7 +79,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
     if (!videoRef.current) return
 
     const video = videoRef.current
-    const hlsUrl = `${VIDEO_API_BASE}/api/hls/playlist?key=${currentItem.key}`
+    const hlsUrl = `${API_BASE}/api/hls/playlist?key=${currentItem.key}`
 
     try {
       if (Hls.isSupported()) {
