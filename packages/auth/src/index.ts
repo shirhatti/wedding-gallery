@@ -54,7 +54,8 @@ export async function validateAuthToken(config: AuthConfig, audience: string, to
 
   const [tokenAudience, tokenVersion, issuedAtStr] = payload.split("|")
   if (!tokenAudience || !tokenVersion || !issuedAtStr) return false
-  if (!timingSafeEqual(tokenAudience, audience)) return false
+  // Allow tokens across subdomains of the same root domain
+  if (!audiencesMatch(tokenAudience, audience)) return false
 
   const currentVersion = (await config.cacheVersion.get("auth_version")) || "1"
   if (!timingSafeEqual(tokenVersion, currentVersion)) return false
@@ -127,6 +128,40 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
     binary += String.fromCharCode.apply(null, Array.from(chunk) as unknown as number[])
   }
   return btoa(binary)
+}
+
+/**
+ * Checks if two audiences (origins) are from the same project
+ * Allows tokens to work across subdomains (e.g., preview and production deployments)
+ * @param tokenAudience The audience from the token
+ * @param requestAudience The audience from the current request
+ * @returns boolean True if audiences are from the same project
+ */
+function audiencesMatch(tokenAudience: string, requestAudience: string): boolean {
+  // Exact match - fastest path
+  if (timingSafeEqual(tokenAudience, requestAudience)) return true
+
+  // Parse origins
+  let tokenUrl: URL
+  let requestUrl: URL
+  try {
+    tokenUrl = new URL(tokenAudience)
+    requestUrl = new URL(requestAudience)
+  } catch {
+    return false
+  }
+
+  // Both must be HTTPS
+  if (tokenUrl.protocol !== 'https:' || requestUrl.protocol !== 'https:') {
+    return false
+  }
+
+  // Check if both hostnames are jessandsourabh.pages.dev or its subdomains
+  const allowedDomain = 'jessandsourabh.pages.dev'
+  const tokenIsAllowed = tokenUrl.hostname === allowedDomain || tokenUrl.hostname.endsWith(`.${allowedDomain}`)
+  const requestIsAllowed = requestUrl.hostname === allowedDomain || requestUrl.hostname.endsWith(`.${allowedDomain}`)
+
+  return tokenIsAllowed && requestIsAllowed
 }
 
 /**
