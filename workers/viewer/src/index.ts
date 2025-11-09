@@ -95,9 +95,11 @@ export default {
 
           if (env.GALLERY_PASSWORD && password === env.GALLERY_PASSWORD) {
             const headers = new Headers();
+            // Use the frontend's origin as the audience for cross-worker auth
+            const audience = request.headers.get("Origin") || url.origin;
             const token = await createAuthToken(
               { secret: env.AUTH_SECRET!, cacheVersion: env.CACHE_VERSION },
-              url.origin
+              audience
             );
 
             // Only set Secure flag for HTTPS (production), not for local HTTP development

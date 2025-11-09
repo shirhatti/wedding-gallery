@@ -53,7 +53,10 @@ export default {
           get: async (key: string) => env.VIDEO_CACHE.get(key)
         }
       };
-      const valid = await validateAuthToken(authConfig, url.origin, authValue);
+
+      // Use the same audience as the viewer worker (frontend origin)
+      const audience = origin || url.origin;
+      const valid = await validateAuthToken(authConfig, audience, authValue);
 
       if (!valid) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
