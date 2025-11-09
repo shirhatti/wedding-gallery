@@ -1,9 +1,46 @@
 // Media file handler with range support for video streaming
 const MAX_RANGE_SIZE = 50 * 1024 * 1024; // 50MB cap to prevent abuse
 
-export async function handleGetFile(url, env, corsHeaders, request) {
+interface Env {
+  R2_BUCKET: R2Bucket;
+}
+
+/**
+ * Validates that a path component doesn't contain path traversal attempts.
+ * Prevents accessing files outside intended directories.
+ */
+function isSafePath(pathComponent: string): boolean {
+  if (!pathComponent || typeof pathComponent !== "string") {
+    return false;
+  }
+
+  // Reject any path containing:
+  // - ".." (parent directory traversal)
+  // - Absolute paths (starting with /)
+  // - Null bytes
+  // - Backslashes (Windows path separators)
+  if (pathComponent.includes("..") ||
+      pathComponent.startsWith("/") ||
+      pathComponent.includes("\0") ||
+      pathComponent.includes("\\")) {
+    return false;
+  }
+
+  return true;
+}
+
+export async function handleGetFile(url: URL, env: Env, corsHeaders: Record<string, string>, request: Request): Promise<Response> {
   const key = decodeURIComponent(url.pathname.replace("/api/file/", ""));
-  
+
+  // Validate key to prevent path traversal
+  if (!isSafePath(key)) {
+    console.error(`Path traversal attempt in file request: ${key}`);
+    return new Response("Invalid file path", {
+      status: 400,
+      headers: corsHeaders
+    });
+  }
+
   try {
     // Check if this is a range request (for video streaming)
     const range = request.headers.get("range");
@@ -81,10 +118,11 @@ export async function handleGetFile(url, env, corsHeaders, request) {
 
       return new Response(object.body, { headers });
     }
-  } catch (_error) {
-    return new Response("Failed to retrieve file", { 
+  } catch (error) {
+    console.error("Failed to retrieve file:", error);
+    return new Response("Failed to retrieve file", {
       status: 500,
-      headers: corsHeaders 
+      headers: corsHeaders
     });
   }
 }

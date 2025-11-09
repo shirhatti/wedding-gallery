@@ -9,6 +9,33 @@ interface Env {
   AUTH_SECRET?: string; // Secret used to sign auth cookie
 }
 
+/**
+ * Validates that a path component doesn't contain path traversal attempts.
+ * Prevents accessing files outside intended directories.
+ *
+ * @param pathComponent - The path component to validate
+ * @returns true if path is safe, false if it contains traversal attempts
+ */
+function isSafePath(pathComponent: string): boolean {
+  if (!pathComponent || typeof pathComponent !== "string") {
+    return false;
+  }
+
+  // Reject any path containing:
+  // - ".." (parent directory traversal)
+  // - Absolute paths (starting with /)
+  // - Null bytes
+  // - Backslashes (Windows path separators)
+  if (pathComponent.includes("..") ||
+      pathComponent.startsWith("/") ||
+      pathComponent.includes("\0") ||
+      pathComponent.includes("\\")) {
+    return false;
+  }
+
+  return true;
+}
+
 export default {
     async fetch(request: Request, env: Env): Promise<Response> {
       const url = new URL(request.url);
@@ -304,7 +331,7 @@ export default {
       }
 
       const media = result.results.map((row) => {
-        const r = row as MediaRow;
+        const r = row as unknown as MediaRow;
         return {
           key: r.key,
           name: r.filename,
@@ -323,7 +350,8 @@ export default {
           ...corsHeaders
         },
       });
-    } catch (_error) {
+    } catch (error) {
+      console.error("Failed to list media:", error);
       return new Response(JSON.stringify({ error: "Failed to list media" }), {
         status: 500,
         headers: {
@@ -338,6 +366,15 @@ export default {
   async function handleGetThumbnail(url: URL, env: Env, corsHeaders: Record<string, string>, request: Request): Promise<Response> {
     const key = decodeURIComponent(url.pathname.replace("/api/thumbnail/", ""));
     const size = url.searchParams.get("size") || "medium";
+
+    // Validate key to prevent path traversal
+    if (!isSafePath(key)) {
+      console.error(`Path traversal attempt in thumbnail request: ${key}`);
+      return new Response("Invalid thumbnail path", {
+        status: 400,
+        headers: corsHeaders
+      });
+    }
 
     try {
       // Map size to R2 path
@@ -385,7 +422,8 @@ export default {
       Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
 
       return new Response(object.body, { headers });
-    } catch (_error) {
+    } catch (error) {
+      console.error("Failed to retrieve thumbnail:", error);
       return new Response("Failed to retrieve thumbnail", {
         status: 500,
         headers: corsHeaders
@@ -404,6 +442,25 @@ export default {
 
     const videoKey = decodeURIComponent(pathParts.slice(0, -1).join("/"));
     const filename = decodeURIComponent(pathParts[pathParts.length - 1]);
+
+    // Validate all path components to prevent path traversal
+    if (!isSafePath(videoKey) || !isSafePath(filename)) {
+      console.error(`Path traversal attempt in HLS request: videoKey=${videoKey}, filename=${filename}`);
+      return new Response("Invalid HLS path", {
+        status: 400,
+        headers: corsHeaders
+      });
+    }
+
+    // Additional validation: only allow expected HLS file types
+    if (!filename.endsWith(".m3u8") && !filename.endsWith(".ts")) {
+      console.error(`Invalid HLS file type requested: ${filename}`);
+      return new Response("Invalid HLS file type", {
+        status: 400,
+        headers: corsHeaders
+      });
+    }
+
     const hlsKey = `hls/${videoKey}/${filename}`;
 
     try {
@@ -428,7 +485,8 @@ export default {
       Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
 
       return new Response(object.body, { headers });
-    } catch (_error) {
+    } catch (error) {
+      console.error("Failed to retrieve HLS file:", error);
       return new Response("Failed to retrieve HLS file", {
         status: 500,
         headers: corsHeaders
