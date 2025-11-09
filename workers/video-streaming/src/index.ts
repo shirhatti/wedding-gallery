@@ -12,6 +12,7 @@ import {
   generateProgressiveManifest
 } from "@wedding-gallery/shared-video-lib";
 import { sanitizeVideoKey, sanitizeFilename } from "./lib/security";
+import { validateAuthToken } from "./lib/auth";
 import type { VideoStreamingEnv } from "./types";
 
 export default {
@@ -25,16 +26,36 @@ export default {
     if (env.ALLOW_LOCALHOST_CORS === "true" && origin?.includes("localhost")) {
       corsHeaders["Access-Control-Allow-Origin"] = origin;
       corsHeaders["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS";
-      corsHeaders["Access-Control-Allow-Headers"] = "Content-Type";
+      corsHeaders["Access-Control-Allow-Headers"] = "Content-Type, Cookie";
+      corsHeaders["Access-Control-Allow-Credentials"] = "true";
     } else if (env.PAGES_ORIGIN && origin === env.PAGES_ORIGIN) {
       corsHeaders["Access-Control-Allow-Origin"] = env.PAGES_ORIGIN;
       corsHeaders["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS";
-      corsHeaders["Access-Control-Allow-Headers"] = "Content-Type";
+      corsHeaders["Access-Control-Allow-Headers"] = "Content-Type, Cookie";
+      corsHeaders["Access-Control-Allow-Credentials"] = "true";
     }
 
     // Handle CORS preflight
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
+    }
+
+    // Check authentication if password is set
+    if (env.GALLERY_PASSWORD) {
+      const cookies = request.headers.get("Cookie") || "";
+      const match = cookies.match(/(?:^|;)\s*gallery_auth=([^;]+)/);
+      const authValue = match?.[1] ?? "";
+      const valid = await validateAuthToken(env, url.origin, authValue);
+
+      if (!valid) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders
+          }
+        });
+      }
     }
 
     // Route handling - video streaming only
