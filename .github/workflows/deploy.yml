@@ -32,6 +32,12 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: f974b5257387abc8b6e9e66734f27ec3
 
+      - name: Deploy Video Streaming Worker
+        run: cd workers/video-streaming && npx wrangler deploy --var PAGES_ORIGIN:https://jessandsourabh.pages.dev
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: f974b5257387abc8b6e9e66734f27ec3
+
       - name: Deploy Album Worker
         run: npm run deploy:album
         env:
@@ -57,6 +63,7 @@ jobs:
         run: npm run build:pages
         env:
           VITE_API_BASE: https://viewer.shirhatti.workers.dev
+          VITE_VIDEO_API_BASE: https://video-streaming.shirhatti.workers.dev
 
       - name: Deploy to Cloudflare Pages
         run: cd pages/gallery && npx wrangler pages deploy dist --project-name=jessandsourabh
