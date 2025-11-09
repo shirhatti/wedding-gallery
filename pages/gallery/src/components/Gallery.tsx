@@ -25,8 +25,10 @@ export function Gallery() {
 
       if (!response.ok) {
         if (response.status === 401) {
-          // Redirect to login page with returnTo parameter
-          const returnTo = encodeURIComponent(window.location.href)
+          // Redirect to login page with returnTo parameter (pathname only, not full URL)
+          const returnTo = encodeURIComponent(
+            window.location.pathname + window.location.search
+          )
           window.location.href = `/login?returnTo=${returnTo}`
           return
         }
