@@ -6,6 +6,13 @@ import { Button } from '@/components/ui/button'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
+// Responsive sizes for lightbox images
+// Mobile uses large thumbnail (800px), desktop uses original
+const LIGHTBOX_SIZES = [
+  '(max-width: 768px) 100vw',  // Use large thumbnail on mobile
+  '90vw'                        // Use original on desktop
+].join(', ')
+
 interface LightboxProps {
   media: MediaItem[]
   initialIndex: number
@@ -66,14 +73,6 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
       sources.push(`${getOriginalUrl(item)} 2000w`)
     }
     return sources.join(', ')
-  }
-
-  // Generate sizes for lightbox - optimize for viewport size
-  const getLightboxSizes = (): string => {
-    return [
-      '(max-width: 768px) 100vw',  // Use large thumbnail on mobile
-      '90vw'                        // Use original on desktop
-    ].join(', ')
   }
 
   useEffect(() => {
@@ -231,7 +230,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
           <img
             src={getOriginalUrl(currentItem)}
             srcSet={getLightboxSrcset(currentItem)}
-            sizes={getLightboxSizes()}
+            sizes={LIGHTBOX_SIZES}
             alt={currentItem.name}
             className="max-h-[90vh] max-w-full object-contain"
           />

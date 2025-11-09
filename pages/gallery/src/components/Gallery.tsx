@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { Play } from 'lucide-react'
 import Masonry from 'react-masonry-css'
 import { MediaItem } from '@/types'
@@ -7,6 +7,15 @@ import { LazyImage } from './LazyImage'
 import { cn } from '@/lib/utils'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
+
+// Responsive sizes for thumbnail images based on masonry breakpoints
+// Matches the column layout: 2 cols (mobile) → 3 (tablet) → 4 (laptop) → 5 (desktop)
+const THUMBNAIL_SIZES = [
+  '(max-width: 640px) 50vw',   // 2 columns on mobile
+  '(max-width: 1024px) 33vw',  // 3 columns on tablet
+  '(max-width: 1536px) 25vw',  // 4 columns on laptop
+  '20vw'                        // 5 columns on desktop
+].join(', ')
 
 export function Gallery() {
   const [media, setMedia] = useState<MediaItem[]>([])
@@ -75,15 +84,6 @@ export function Gallery() {
     ].join(', ')
   }
 
-  // Generate sizes attribute based on responsive breakpoints
-  // Memoized since it returns the same value for all images
-  const thumbnailSizes = useMemo(() => [
-    '(max-width: 640px) 50vw',   // 2 columns on mobile
-    '(max-width: 1024px) 33vw',  // 3 columns on tablet
-    '(max-width: 1536px) 25vw',  // 4 columns on laptop
-    '20vw'                        // 5 columns on desktop
-  ].join(', '), [])
-
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-zinc-900">
@@ -150,7 +150,7 @@ export function Gallery() {
                   <LazyImage
                     src={getThumbnailUrl(item, 'medium')}
                     srcset={getThumbnailSrcset(item)}
-                    sizes={thumbnailSizes}
+                    sizes={THUMBNAIL_SIZES}
                     alt={item.name}
                     aspectRatio={item.width && item.height ? item.width / item.height : undefined}
                   />

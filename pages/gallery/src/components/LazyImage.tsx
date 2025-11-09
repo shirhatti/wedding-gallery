@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver'
 import { cn } from '@/lib/utils'
 
@@ -12,9 +12,37 @@ interface LazyImageProps {
   onLoad?: () => void
 }
 
+/**
+ * Lazy-loaded image component with responsive srcset support and intersection observer.
+ *
+ * Features:
+ * - Defers image loading until the image enters the viewport
+ * - Supports responsive images via srcset and sizes attributes
+ * - Aggressive prefetching (2000-3000px rootMargin) for smooth scrolling
+ * - Fade-in animation on load
+ * - Preserves aspect ratio to prevent layout shift
+ *
+ * Important behavior notes:
+ * - Once an image starts loading, its src/srcset are locked and won't update even if props change.
+ *   This prevents interrupting in-progress loads and browser srcset re-selection.
+ * - If viewport size changes (e.g., rotating device, resizing window), the browser won't
+ *   re-select a different srcset candidate until the component remounts.
+ * - To force an image update after initial load, remount the component with a new key prop.
+ *
+ * @example
+ * ```tsx
+ * <LazyImage
+ *   src="/image-medium.jpg"
+ *   srcset="/image-small.jpg 400w, /image-medium.jpg 800w, /image-large.jpg 1200w"
+ *   sizes="(max-width: 640px) 100vw, 50vw"
+ *   alt="Description"
+ *   aspectRatio={16/9}
+ * />
+ * ```
+ */
 export function LazyImage({ src, srcset, sizes, alt, aspectRatio, className, onLoad }: LazyImageProps) {
   const [imageSrc, setImageSrc] = useState<string | null>(null)
-  const [imageSrcset, setImageSrcset] = useState<string | null>(null)
+  const imageSrcsetRef = useRef<string | null>(null)
   const [isLoaded, setIsLoaded] = useState(false)
   const isMobile = window.matchMedia('(max-width: 768px)').matches
 
@@ -35,7 +63,7 @@ export function LazyImage({ src, srcset, sizes, alt, aspectRatio, className, onL
     if (isIntersecting && !imageSrc) {
       setImageSrc(src)
       if (srcset) {
-        setImageSrcset(srcset)
+        imageSrcsetRef.current = srcset
       }
     }
   }, [isIntersecting, src, srcset, imageSrc])
@@ -54,7 +82,7 @@ export function LazyImage({ src, srcset, sizes, alt, aspectRatio, className, onL
       {imageSrc && (
         <img
           src={imageSrc}
-          srcSet={imageSrcset || undefined}
+          srcSet={imageSrcsetRef.current || undefined}
           sizes={sizes}
           alt={alt}
           onLoad={handleLoad}
