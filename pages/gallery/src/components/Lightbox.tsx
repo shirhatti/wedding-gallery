@@ -109,7 +109,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
             video.load()
           }
         })
-      } else if (hlsCheck.ok && video.canPlayType('application/vnd.apple.mpegurl')) {
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         // Native HLS support (Safari)
         video.src = hlsUrl
         video.load()
