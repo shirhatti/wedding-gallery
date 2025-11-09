@@ -26,7 +26,6 @@ dist/
 
 # Local database files
 *.db
-*.sql
 
 # Claude settings (may contain secrets)
 .claude/settings.local.json
