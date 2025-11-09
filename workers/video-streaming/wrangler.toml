@@ -1,0 +1,25 @@
+name = "video-streaming"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# R2 bucket binding for video files
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "wedding-photos"
+preview_bucket_name = "wedding-photos"
+
+# KV namespace for video-specific caching
+# Stores: manifests, signed URLs, signing keys
+[[kv_namespaces]]
+binding = "VIDEO_CACHE"
+id = "cf132b95f9434658b98935f880a0b299"  # Reuse existing CACHE_VERSION KV for now
+preview_id = "0e495b6647154a1a8532b0d3fafb7c82"
+
+# Development settings
+[dev]
+port = 8788  # Different port from viewer worker (8787)
+local_protocol = "http"
+
+# Optimized for video workload (CPU-intensive signing)
+[limits]
+cpu_ms = 50  # Allow more CPU time for signing operations
