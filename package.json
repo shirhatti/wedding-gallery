@@ -20,6 +20,7 @@
     "prepare": "husky install"
   },
   "workspaces": [
+    "packages/*",
     "workers/*",
     "pages/*"
   ],

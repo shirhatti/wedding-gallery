@@ -1,6 +1,7 @@
 import { handleHomePage } from "./handlers/home";
 import { handleGetFile } from "./handlers/media";
 import { signR2Url, getSigningConfig } from "@wedding-gallery/shared-video-lib";
+import { createAuthToken, validateAuthToken, isValidReturnTo } from "@wedding-gallery/auth";
 
 interface Env {
   R2_BUCKET: R2Bucket;
@@ -90,16 +91,20 @@ export default {
           const formData = await request.formData();
           const password = formData.get("password")?.toString() || "";
           const returnTo = formData.get("returnTo")?.toString() || "/";
-          const validReturnTo = isValidReturnTo(returnTo) ? returnTo : "/";
+          const validReturnTo = isValidReturnTo(returnTo, "jessandsourabh.pages.dev") ? returnTo : "/";
 
           if (env.GALLERY_PASSWORD && password === env.GALLERY_PASSWORD) {
             const headers = new Headers();
-            const token = await createAuthToken(env, url.origin);
+            const token = await createAuthToken(
+              { secret: env.AUTH_SECRET!, cacheVersion: env.CACHE_VERSION },
+              url.origin
+            );
 
             // Only set Secure flag for HTTPS (production), not for local HTTP development
             const isSecure = url.protocol === "https:";
             const secureCookie = isSecure ? "; Secure" : "";
-            headers.set("Set-Cookie", `gallery_auth=${token}; Path=/; HttpOnly${secureCookie}; SameSite=Lax; Max-Age=2592000`);
+            // Use SameSite=None for cross-origin cookies (Pages -> Worker)
+            headers.set("Set-Cookie", `gallery_auth=${token}; Path=/; HttpOnly${secureCookie}; SameSite=None; Max-Age=2592000`);
             headers.set("Location", validReturnTo);
             return new Response(null, { status: 302, headers });
           }
@@ -109,7 +114,7 @@ export default {
           });
         }
         const returnTo = url.searchParams.get("returnTo") || "/";
-        const validReturnTo = isValidReturnTo(returnTo) ? returnTo : "/";
+        const validReturnTo = isValidReturnTo(returnTo, "jessandsourabh.pages.dev") ? returnTo : "/";
         return new Response(getLoginPage(false, validReturnTo), {
           headers: { "Content-Type": "text/html" }
         });
@@ -120,7 +125,11 @@ export default {
         const cookies = request.headers.get("Cookie") || "";
         const match = cookies.match(/(?:^|;)\s*gallery_auth=([^;]+)/);
         const authValue = match?.[1] ?? "";
-        const valid = await validateAuthToken(env, url.origin, authValue);
+        const valid = await validateAuthToken(
+          { secret: env.AUTH_SECRET!, cacheVersion: env.CACHE_VERSION },
+          url.origin,
+          authValue
+        );
         if (!valid) {
           // For API requests, return 401 with CORS headers so client can handle redirect
           if (url.pathname.startsWith("/api/")) {
@@ -153,88 +162,6 @@ export default {
       return new Response("Not Found", { status: 404 });
     },
   };
-
-  async function createAuthToken(env: Env, audience: string): Promise<string> {
-    const secret = env.AUTH_SECRET;
-    if (!secret) {
-      throw new Error("AUTH_SECRET must be configured");
-    }
-    const issuedAt = Math.floor(Date.now() / 1000);
-    const version = (await env.CACHE_VERSION.get("auth_version")) || "1";
-    // Use '|' inside payload to avoid conflicts with '.' separator
-    const payload = `${audience}|${version}|${issuedAt}`;
-    const key = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
-    const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
-    const b64 = arrayBufferToBase64(sig);
-    return `${payload}.${b64}`;
-  }
-
-  async function validateAuthToken(env: Env, audience: string, token: string): Promise<boolean> {
-    const lastDot = token.lastIndexOf(".");
-    if (lastDot <= 0) return false;
-    const payload = token.slice(0, lastDot);
-    const sig = token.slice(lastDot + 1);
-
-    const [tokenAudience, tokenVersion, issuedAtStr] = payload.split("|");
-    if (!tokenAudience || !tokenVersion || !issuedAtStr) return false;
-    if (!timingSafeEqual(tokenAudience, audience)) return false;
-
-    const currentVersion = (await env.CACHE_VERSION.get("auth_version")) || "1";
-    if (!timingSafeEqual(tokenVersion, currentVersion)) return false;
-    const issuedAt = Number(issuedAtStr);
-    if (!Number.isFinite(issuedAt)) return false;
-    // Optional: expire after 30 days
-    const now = Math.floor(Date.now() / 1000);
-    if (now - issuedAt > 60 * 60 * 24 * 30) return false;
-
-    const secret = env.AUTH_SECRET;
-    if (!secret) return false;
-    const key = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
-    const expected = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
-    const expectedB64 = arrayBufferToBase64(expected);
-    return timingSafeEqual(sig, expectedB64);
-  }
-
-  function arrayBufferToBase64(buffer: ArrayBuffer): string {
-    const bytes = new Uint8Array(buffer);
-    let binary = "";
-    const chunkSize = 0x8000; // avoid call stack limits
-    for (let i = 0; i < bytes.byteLength; i += chunkSize) {
-      const chunk = bytes.subarray(i, i + chunkSize);
-      binary += String.fromCharCode.apply(null, Array.from(chunk) as unknown as number[]);
-    }
-    return btoa(binary);
-  }
-
-  function timingSafeEqual(a: string, b: string): boolean {
-    const aLen = a.length;
-    const bLen = b.length;
-    let mismatch = aLen === bLen ? 0 : 1;
-    const len = Math.max(aLen, bLen);
-    for (let i = 0; i < len; i++) {
-      const ac = a.charCodeAt(i) || 0;
-      const bc = b.charCodeAt(i) || 0;
-      mismatch |= ac ^ bc;
-    }
-    return mismatch === 0;
-  }
-
-  function isValidReturnTo(returnTo: string): boolean {
-    // Must start with / and not start with // (to prevent protocol-relative URLs)
-    return returnTo.startsWith("/") && !returnTo.startsWith("//");
-  }
 
   function escapeHtml(str: string): string {
     return str

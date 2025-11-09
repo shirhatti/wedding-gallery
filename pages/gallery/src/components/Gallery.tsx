@@ -25,7 +25,9 @@ export function Gallery() {
 
       if (!response.ok) {
         if (response.status === 401) {
-          window.location.href = `${API_BASE}/login`
+          // Redirect to worker's login page with returnTo parameter
+          const returnTo = encodeURIComponent(window.location.href)
+          window.location.href = `${API_BASE}/login?returnTo=${returnTo}`
           return
         }
         throw new Error('Failed to load media')
