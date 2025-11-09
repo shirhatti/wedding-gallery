@@ -25,23 +25,52 @@ export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv
     // Sanitize video key to prevent path traversal attacks
     const videoKey = sanitizeVideoKey(rawVideoKey);
 
-    // Query database for available quality levels (needed for cache key)
-    const result = await env.DB.prepare(
-      "SELECT hls_qualities FROM media WHERE key = ?"
-    ).bind(videoKey).first();
-
-    if (!result || !result.hls_qualities) {
-      return new Response(JSON.stringify({ error: "HLS variants not found in database" }), {
-        status: 404,
+    // Check manifest cache first (fastest path - single KV read)
+    // Since hls_qualities never changes, we don't need time-based cache invalidation
+    const manifestCacheKey = `manifest:master:v4:${videoKey}`;
+    const cachedManifest = await env.VIDEO_CACHE.get(manifestCacheKey);
+    if (cachedManifest) {
+      return new Response(cachedManifest, {
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "application/vnd.apple.mpegurl",
+          "Cache-Control": "public, max-age=31536000, immutable",
+          "X-Cache": "HIT",
           ...corsHeaders,
         },
       });
     }
 
-    // Parse quality levels from database (stored as JSON array like ["1080p", "360p"])
-    const qualityLevels: string[] = JSON.parse(result.hls_qualities as string);
+    // Cache miss - need to fetch quality levels
+    // First check KV cache for hls_qualities (avoids DB query)
+    const qualitiesCacheKey = `qualities:${videoKey}`;
+    let qualityLevels: string[];
+
+    const cachedQualities = await env.VIDEO_CACHE.get(qualitiesCacheKey);
+    if (cachedQualities) {
+      qualityLevels = JSON.parse(cachedQualities);
+    } else {
+      // Cache miss - query database
+      const result = await env.DB.prepare(
+        "SELECT hls_qualities FROM media WHERE key = ?"
+      ).bind(videoKey).first();
+
+      if (!result || !result.hls_qualities) {
+        return new Response(JSON.stringify({ error: "HLS variants not found in database" }), {
+          status: 404,
+          headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          },
+        });
+      }
+
+      // Parse quality levels from database (stored as JSON array like ["1080p", "360p"])
+      qualityLevels = JSON.parse(result.hls_qualities as string);
+
+      // Cache quality levels indefinitely (they never change)
+      await env.VIDEO_CACHE.put(qualitiesCacheKey, JSON.stringify(qualityLevels));
+    }
+
     const variantFiles = qualityLevels.map(q => `${q}.m3u8`);
 
     if (variantFiles.length === 0) {
@@ -49,23 +78,6 @@ export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv
         status: 404,
         headers: {
           "Content-Type": "application/json",
-          ...corsHeaders,
-        },
-      });
-    }
-
-    // Calculate time window for caching (4-hour buckets)
-    const timeWindow = Math.floor(Date.now() / 1000 / 14400);
-    const manifestCacheKey = `manifest:master:v3:${videoKey}:${timeWindow}`;
-
-    // Check manifest cache (fastest path - single KV read)
-    const cachedManifest = await env.VIDEO_CACHE.get(manifestCacheKey);
-    if (cachedManifest) {
-      return new Response(cachedManifest, {
-        headers: {
-          "Content-Type": "application/vnd.apple.mpegurl",
-          "Cache-Control": "private, max-age=3600",
-          "X-Cache": "HIT",
           ...corsHeaders,
         },
       });
@@ -124,16 +136,13 @@ export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv
 
     const masterPlaylist = masterLines.join("\n");
 
-    // Cache the generated manifest (90% of 4-hour TTL)
-    const cacheTtl = Math.floor(14400 * 0.9);
-    await env.VIDEO_CACHE.put(manifestCacheKey, masterPlaylist, {
-      expirationTtl: cacheTtl
-    });
+    // Cache the generated manifest indefinitely (hls_qualities never changes)
+    await env.VIDEO_CACHE.put(manifestCacheKey, masterPlaylist);
 
     return new Response(masterPlaylist, {
       headers: {
         "Content-Type": "application/vnd.apple.mpegurl",
-        "Cache-Control": "private, max-age=3600",
+        "Cache-Control": "public, max-age=31536000, immutable",
         "X-Cache": "MISS",
         ...corsHeaders,
       },
