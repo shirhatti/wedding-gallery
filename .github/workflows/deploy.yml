@@ -57,6 +57,7 @@ jobs:
         run: npm run build:pages
         env:
           VITE_API_BASE: https://viewer.shirhatti.workers.dev
+          VITE_VIDEO_API_BASE: https://video-streaming.shirhatti.workers.dev
 
       - name: Deploy to Cloudflare Pages
         run: cd pages/gallery && npx wrangler pages deploy dist --project-name=jessandsourabh

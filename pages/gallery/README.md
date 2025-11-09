@@ -32,12 +32,14 @@ npm run dev
 
 The app will be available at `http://localhost:5173`
 
-**Note:** For local development, set the API base URL:
+**Note:** For local development, set the API base URLs:
 ```bash
-VITE_API_BASE=http://localhost:8787 npm run dev
+VITE_API_BASE=http://localhost:8787 VITE_VIDEO_API_BASE=http://localhost:8788 npm run dev
 ```
 
-This points the app to your local Worker running at `http://localhost:8787`.
+This points the app to:
+- `VITE_API_BASE`: Viewer worker at `http://localhost:8787`
+- `VITE_VIDEO_API_BASE`: Video streaming worker at `http://localhost:8788`
 
 ### Developing with Local Worker
 
@@ -70,15 +72,23 @@ npm run pages:deploy
 
 Set these in the Cloudflare Pages dashboard or via CLI:
 
-- `VITE_API_BASE` - Your Worker API URL (e.g., `https://gallery.yourdomain.com`)
+- `VITE_API_BASE` - Viewer Worker API URL (e.g., `https://viewer.yourdomain.workers.dev`)
+- `VITE_VIDEO_API_BASE` - Video Streaming Worker URL (e.g., `https://video-streaming.yourdomain.workers.dev`)
 
 ## Architecture
 
-This frontend is designed to work with the Wedding Gallery Worker API:
+This frontend is designed to work with two Worker APIs:
 
-- `/api/media` - Get media list with pre-signed URLs
-- `/api/hls/playlist?key=<key>` - Get HLS playlist for videos
+**Viewer Worker** (`VITE_API_BASE`):
+- `/api/media` - Get media list with metadata
+- `/api/file/:key` - Get media files (fallback when presigned URLs unavailable)
+- `/api/thumbnail/:key` - Get thumbnails
 - `/login` - Authentication endpoint
+
+**Video Streaming Worker** (`VITE_VIDEO_API_BASE`):
+- `/api/hls/playlist?key=<key>` - Get HLS master playlist for videos
+- `/api/hls/:key/:variant` - Get variant playlists (360p, 720p, 1080p)
+- `/api/hls-segment/:key/:segment` - Get video segments with presigned URLs
 
 ### Pre-signed URLs
 
