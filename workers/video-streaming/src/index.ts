@@ -11,7 +11,7 @@ import {
   batchSignWithCache,
   generateProgressiveManifest
 } from "@wedding-gallery/shared-video-lib";
-import { validateAuthToken } from "@wedding-gallery/auth";
+import { validateAuthToken, getAuthCookie } from "@wedding-gallery/auth";
 import { sanitizeVideoKey, sanitizeFilename } from "./lib/security";
 import type { VideoStreamingEnv } from "./types";
 
@@ -19,32 +19,9 @@ export default {
   async fetch(request: Request, env: VideoStreamingEnv): Promise<Response> {
     const url = new URL(request.url);
 
-    // CORS headers
-    const corsHeaders: Record<string, string> = {};
-    const origin = request.headers.get("Origin");
-
-    if (env.ALLOW_LOCALHOST_CORS === "true" && origin?.includes("localhost")) {
-      corsHeaders["Access-Control-Allow-Origin"] = origin;
-      corsHeaders["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS";
-      corsHeaders["Access-Control-Allow-Headers"] = "Content-Type, Cookie";
-      corsHeaders["Access-Control-Allow-Credentials"] = "true";
-    } else if (env.PAGES_ORIGIN && origin === env.PAGES_ORIGIN) {
-      corsHeaders["Access-Control-Allow-Origin"] = env.PAGES_ORIGIN;
-      corsHeaders["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS";
-      corsHeaders["Access-Control-Allow-Headers"] = "Content-Type, Cookie";
-      corsHeaders["Access-Control-Allow-Credentials"] = "true";
-    }
-
-    // Handle CORS preflight
-    if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders });
-    }
-
     // Check authentication if password is set
     if (env.GALLERY_PASSWORD) {
-      const cookies = request.headers.get("Cookie") || "";
-      const match = cookies.match(/(?:^|;)\s*gallery_auth=([^;]+)/);
-      const authValue = match?.[1] ?? "";
+      const authValue = getAuthCookie(request);
 
       // Use shared auth library with config adapter
       const authConfig = {
@@ -55,7 +32,16 @@ export default {
       };
 
       // Use the same audience as the viewer worker (frontend origin)
-      const audience = origin || url.origin;
+      // Extract from Referer header (works with Vite proxy and Pages)
+      let audience = url.origin;
+      const referer = request.headers.get("Referer");
+      if (referer) {
+        try {
+          const refererUrl = new URL(referer);
+          audience = refererUrl.origin;
+        } catch {}
+      }
+
       const valid = await validateAuthToken(authConfig, audience, authValue);
 
       if (!valid) {
@@ -63,7 +49,6 @@ export default {
           status: 401,
           headers: {
             "Content-Type": "application/json",
-            ...corsHeaders
           }
         });
       }
@@ -71,16 +56,15 @@ export default {
 
     // Route handling - video streaming only
     if (url.pathname === "/api/hls/playlist") {
-      return handleHLSPlaylist(request, env, corsHeaders);
+      return handleHLSPlaylist(request, env);
     } else if (url.pathname.startsWith("/api/hls-segment/")) {
-      return handleLazySegment(url, env, corsHeaders);
+      return handleLazySegment(url, env);
     } else if (url.pathname.startsWith("/api/hls/")) {
-      return handleGetHLS(url, env, corsHeaders);
+      return handleGetHLS(url, env);
     }
 
     return new Response("Not Found - Video Streaming Worker", {
       status: 404,
-      headers: corsHeaders
     });
   },
 };
@@ -90,14 +74,13 @@ export default {
  * For .m3u8 manifests: rewrites with pre-signed URLs for AirPlay support
  * For .ts segments: serves directly from R2
  */
-async function handleGetHLS(url: URL, env: VideoStreamingEnv, corsHeaders: Record<string, string>): Promise<Response> {
+async function handleGetHLS(url: URL, env: VideoStreamingEnv): Promise<Response> {
   // URL format: /api/hls/{videoKey}/{filename}
   const pathParts = url.pathname.replace("/api/hls/", "").split("/");
 
   if (pathParts.length < 2) {
     return new Response("Invalid HLS path", {
       status: 400,
-      headers: corsHeaders
     });
   }
 
@@ -115,7 +98,6 @@ async function handleGetHLS(url: URL, env: VideoStreamingEnv, corsHeaders: Recor
     if (!object) {
       return new Response("HLS file not found", {
         status: 404,
-        headers: corsHeaders
       });
     }
 
@@ -142,7 +124,6 @@ async function handleGetHLS(url: URL, env: VideoStreamingEnv, corsHeaders: Recor
         headers.set("Content-Type", "application/vnd.apple.mpegurl");
         headers.set("Cache-Control", "private, max-age=3600");
         headers.set("X-Cache", "HIT");
-        Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
         return new Response(cachedManifest, { headers });
       }
 
@@ -177,7 +158,6 @@ async function handleGetHLS(url: URL, env: VideoStreamingEnv, corsHeaders: Recor
 
       headers.set("Cache-Control", "private, max-age=3600");
       headers.set("X-Cache", "MISS-PROGRESSIVE");
-      Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
 
       return new Response(manifestStream, { headers });
     }
@@ -185,13 +165,11 @@ async function handleGetHLS(url: URL, env: VideoStreamingEnv, corsHeaders: Recor
     // For non-manifest files or when signing is disabled, serve directly
     headers.set("Cache-Control", "public, max-age=2592000"); // Cache for 30 days
     headers.set("etag", object.httpEtag);
-    Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
 
     return new Response(object.body, { headers });
   } catch {
     return new Response("Failed to retrieve HLS file", {
       status: 500,
-      headers: corsHeaders
     });
   }
 }

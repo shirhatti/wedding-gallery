@@ -1,7 +1,11 @@
 // Media file handler with range support for video streaming
 const MAX_RANGE_SIZE = 50 * 1024 * 1024; // 50MB cap to prevent abuse
 
-export async function handleGetFile(url, env, corsHeaders, request) {
+interface Env {
+  R2_BUCKET: R2Bucket;
+}
+
+export async function handleGetFile(url: URL, env: Env, request: Request): Promise<Response> {
   const key = decodeURIComponent(url.pathname.replace("/api/file/", ""));
   
   try {
@@ -41,7 +45,6 @@ export async function handleGetFile(url, env, corsHeaders, request) {
         const headers = new Headers();
         object.writeHttpMetadata(headers);
         headers.set("Accept-Ranges", "bytes");
-        Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
         return new Response(object.body, { status: 206, headers });
       }
 
@@ -58,7 +61,6 @@ export async function handleGetFile(url, env, corsHeaders, request) {
       headers.set("Accept-Ranges", "bytes");
       headers.set("Content-Length", String(contentLength));
       headers.set("Content-Type", object.httpMetadata?.contentType || "video/mp4");
-      Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
 
       return new Response(object.body, {
         status: 206,
@@ -77,14 +79,12 @@ export async function handleGetFile(url, env, corsHeaders, request) {
       headers.set("etag", object.httpEtag);
       headers.set("Cache-Control", "public, max-age=86400"); // Cache for 24 hours
       headers.set("Accept-Ranges", "bytes"); // Enable range requests
-      Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
 
       return new Response(object.body, { headers });
     }
   } catch (_error) {
-    return new Response("Failed to retrieve file", { 
+    return new Response("Failed to retrieve file", {
       status: 500,
-      headers: corsHeaders 
     });
   }
 }

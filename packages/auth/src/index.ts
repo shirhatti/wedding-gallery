@@ -3,6 +3,8 @@
  * Handles token creation, validation, and cookie management
  */
 
+import { parse as parseCookies } from 'cookie'
+
 export interface AuthConfig {
   secret: string
   cacheVersion: {
@@ -74,6 +76,18 @@ export async function validateAuthToken(config: AuthConfig, audience: string, to
   const expected = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload))
   const expectedB64 = arrayBufferToBase64(expected)
   return timingSafeEqual(sig, expectedB64)
+}
+
+/**
+ * Extracts the authentication cookie from a request
+ * @param request The incoming request
+ * @param cookieName The name of the cookie (defaults to "gallery_auth")
+ * @returns string The cookie value, or empty string if not found
+ */
+export function getAuthCookie(request: Request, cookieName = "gallery_auth"): string {
+  const cookieHeader = request.headers.get("Cookie") || ""
+  const cookies = parseCookies(cookieHeader)
+  return cookies[cookieName] || ""
 }
 
 /**

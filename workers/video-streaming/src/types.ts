@@ -12,8 +12,6 @@ export interface VideoStreamingEnv {
   R2_REGION?: string;
   R2_BUCKET_NAME?: string;
   R2_ACCOUNT_ID?: string;
-  PAGES_ORIGIN?: string;
-  ALLOW_LOCALHOST_CORS?: string;
   // Authentication (shared with viewer worker)
   GALLERY_PASSWORD?: string;
   AUTH_SECRET?: string;

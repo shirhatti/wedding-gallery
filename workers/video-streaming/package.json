@@ -4,7 +4,7 @@
   "private": true,
   "main": "src/index.ts",
   "scripts": {
-    "dev": "wrangler dev --remote --var ALLOW_LOCALHOST_CORS:true",
+    "dev": "wrangler dev --remote",
     "deploy": "wrangler deploy"
   },
   "dependencies": {

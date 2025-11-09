@@ -4,8 +4,8 @@
   "private": true,
   "main": "src/index.ts",
   "scripts": {
-    "dev": "wrangler dev --remote --var ALLOW_LOCALHOST_CORS:true --var ENABLE_PRESIGNED_URLS:true",
-    "dev:local": "wrangler dev --var ALLOW_LOCALHOST_CORS:true",
+    "dev": "wrangler dev --remote --var ENABLE_PRESIGNED_URLS:true",
+    "dev:local": "wrangler dev",
     "deploy": "wrangler deploy"
   },
   "dependencies": {

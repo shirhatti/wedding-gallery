@@ -7,7 +7,7 @@ import type { VideoStreamingEnv } from "../types";
  * These are rewritten to worker URLs (not presigned) for fast response
  * Uses industry-standard m3u8-parser for robust playlist handling
  */
-export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv, corsHeaders: Record<string, string>) {
+export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv) {
   try {
     const url = new URL(request.url);
     const rawVideoKey = url.searchParams.get("key");
@@ -17,7 +17,6 @@ export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv
         status: 400,
         headers: {
           "Content-Type": "application/json",
-          ...corsHeaders,
         },
       });
     }
@@ -35,7 +34,6 @@ export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv
           "Content-Type": "application/vnd.apple.mpegurl",
           "Cache-Control": "public, max-age=31536000, immutable",
           "X-Cache": "HIT",
-          ...corsHeaders,
         },
       });
     }
@@ -59,7 +57,6 @@ export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv
           status: 404,
           headers: {
             "Content-Type": "application/json",
-            ...corsHeaders,
           },
         });
       }
@@ -78,7 +75,6 @@ export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv
         status: 404,
         headers: {
           "Content-Type": "application/json",
-          ...corsHeaders,
         },
       });
     }
@@ -144,7 +140,6 @@ export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv
         "Content-Type": "application/vnd.apple.mpegurl",
         "Cache-Control": "public, max-age=31536000, immutable",
         "X-Cache": "MISS",
-        ...corsHeaders,
       },
     });
   } catch (error) {
@@ -153,7 +148,6 @@ export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv
       status: 500,
       headers: {
         "Content-Type": "application/json",
-        ...corsHeaders,
       },
     });
   }

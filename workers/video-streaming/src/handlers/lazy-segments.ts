@@ -24,8 +24,7 @@ import { sanitizeVideoKey, sanitizeFilename } from "../lib/security";
  */
 export async function handleLazySegment(
   url: URL,
-  env: VideoStreamingEnv,
-  corsHeaders: Record<string, string>
+  env: VideoStreamingEnv
 ): Promise<Response> {
   try {
     // Parse URL: /api/hls-segment/:videoKey/:segmentFile
@@ -34,7 +33,6 @@ export async function handleLazySegment(
     if (pathParts.length < 2) {
       return new Response("Invalid segment path", {
         status: 400,
-        headers: corsHeaders,
       });
     }
 
@@ -50,7 +48,6 @@ export async function handleLazySegment(
     if (!isVideoSigningEnabled(env)) {
       return new Response("Presigned URLs not configured", {
         status: 500,
-        headers: corsHeaders,
       });
     }
 
@@ -71,7 +68,6 @@ export async function handleLazySegment(
     console.error("Lazy segment signing error:", error);
     return new Response("Failed to sign segment", {
       status: 500,
-      headers: corsHeaders,
     });
   }
 }

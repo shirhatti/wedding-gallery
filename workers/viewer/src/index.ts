@@ -1,7 +1,7 @@
 import { handleHomePage } from "./handlers/home";
 import { handleGetFile } from "./handlers/media";
 import { signR2Url, getSigningConfig } from "@wedding-gallery/shared-video-lib";
-import { createAuthToken, validateAuthToken, isValidReturnTo } from "@wedding-gallery/auth";
+import { createAuthToken, validateAuthToken, isValidReturnTo, getAuthCookie } from "@wedding-gallery/auth";
 
 interface Env {
   R2_BUCKET: R2Bucket;
@@ -15,9 +15,7 @@ interface Env {
   R2_REGION?: string;
   R2_BUCKET_NAME?: string;
   R2_ACCOUNT_ID?: string;
-  PAGES_ORIGIN?: string; // Pages domain for CORS
   ENABLE_PRESIGNED_URLS?: string; // Explicitly enable pre-signed URLs (set to "true")
-  ALLOW_LOCALHOST_CORS?: string; // Set to "true" to allow localhost CORS (for development)
 }
 
 export default {
@@ -29,56 +27,11 @@ export default {
         throw new Error("AUTH_SECRET must be configured when GALLERY_PASSWORD is set");
       }
 
-      // CORS headers - safe by default, only allow specific origins when configured
-      const requestOrigin = request.headers.get("Origin") || "";
-      const allowedOrigins: string[] = [];
-
-      // Allow Pages origin if configured (for production Cloudflare Pages integration)
-      // Supports comma-separated list of origins for multiple environments
-      if (env.PAGES_ORIGIN) {
-        const origins = env.PAGES_ORIGIN.split(",").map(o => o.trim());
-        allowedOrigins.push(...origins);
-      }
-
-      // Only allow localhost when explicitly enabled (for development)
-      if (env.ALLOW_LOCALHOST_CORS === "true") {
-        allowedOrigins.push(
-          "http://localhost:5173",     // Local Vite dev server
-          "http://127.0.0.1:5173",     // Alternative localhost
-          "http://localhost:3000"      // Alternative port
-        );
-      }
-
-      // Check if request origin is allowed
-      // Support wildcard subdomains for Cloudflare Pages previews (*.jessandsourabh.pages.dev)
-      const isAllowedOrigin = allowedOrigins.includes(requestOrigin) ||
-        (requestOrigin.startsWith("https://") &&
-         (requestOrigin === "https://jessandsourabh.pages.dev" ||
-          requestOrigin.endsWith(".jessandsourabh.pages.dev")));
-
-      const corsHeaders: Record<string, string> = {
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Range, Cookie",
-        "Accept-Ranges": "bytes",
-      };
-
-      // Only set CORS headers if origin is explicitly allowed
-      if (isAllowedOrigin) {
-        corsHeaders["Access-Control-Allow-Origin"] = requestOrigin;
-        corsHeaders["Access-Control-Allow-Credentials"] = "true";
-      }
-
-      // Handle CORS preflight
-      if (request.method === "OPTIONS") {
-        return new Response(null, { headers: corsHeaders });
-      }
-
       // Cache version endpoint (public, no auth required)
       if (url.pathname === "/api/cache-version") {
         const version = await env.CACHE_VERSION.get("thumbnail_version") || Date.now().toString();
         return new Response(JSON.stringify({ version }), {
           headers: {
-            ...corsHeaders,
             "Content-Type": "application/json",
             "Cache-Control": "no-cache"
           }
@@ -96,7 +49,19 @@ export default {
           if (env.GALLERY_PASSWORD && password === env.GALLERY_PASSWORD) {
             const headers = new Headers();
             // Use the frontend's origin as the audience for cross-worker auth
-            const audience = request.headers.get("Origin") || url.origin;
+            // Try Origin header first, then extract from Referer, finally fallback to url.origin
+            let audience = request.headers.get("Origin");
+            if (!audience) {
+              const referer = request.headers.get("Referer");
+              if (referer) {
+                try {
+                  const refererUrl = new URL(referer);
+                  audience = refererUrl.origin;
+                } catch {}
+              }
+            }
+            audience = audience || url.origin;
+
             const token = await createAuthToken(
               { secret: env.AUTH_SECRET!, cacheVersion: env.CACHE_VERSION },
               audience
@@ -105,8 +70,9 @@ export default {
             // Only set Secure flag for HTTPS (production), not for local HTTP development
             const isSecure = url.protocol === "https:";
             const secureCookie = isSecure ? "; Secure" : "";
-            // Use SameSite=None for cross-origin cookies (Pages -> Worker)
-            headers.set("Set-Cookie", `gallery_auth=${token}; Path=/; HttpOnly${secureCookie}; SameSite=None; Max-Age=2592000`);
+            // For localhost (HTTP), use SameSite=Lax. For production (HTTPS), use SameSite=None
+            const sameSite = isSecure ? "SameSite=None" : "SameSite=Lax";
+            headers.set("Set-Cookie", `gallery_auth=${token}; Path=/; HttpOnly${secureCookie}; ${sameSite}; Max-Age=2592000`);
             headers.set("Location", validReturnTo);
             return new Response(null, { status: 302, headers });
           }
@@ -124,22 +90,35 @@ export default {
 
       // Check authentication if password is set
       if (env.GALLERY_PASSWORD) {
-        const cookies = request.headers.get("Cookie") || "";
-        const match = cookies.match(/(?:^|;)\s*gallery_auth=([^;]+)/);
-        const authValue = match?.[1] ?? "";
+        const authValue = getAuthCookie(request);
+
+        // Extract audience the same way we do during login
+        // Try Origin header first, then Referer, finally fallback to url.origin
+        let audience = request.headers.get("Origin");
+        if (!audience) {
+          const referer = request.headers.get("Referer");
+          if (referer) {
+            try {
+              const refererUrl = new URL(referer);
+              audience = refererUrl.origin;
+            } catch {}
+          }
+        }
+        audience = audience || url.origin;
+
         const valid = await validateAuthToken(
           { secret: env.AUTH_SECRET!, cacheVersion: env.CACHE_VERSION },
-          url.origin,
+          audience,
           authValue
         );
+
         if (!valid) {
-          // For API requests, return 401 with CORS headers so client can handle redirect
+          // For API requests, return 401 so client can handle redirect
           if (url.pathname.startsWith("/api/")) {
             return new Response(JSON.stringify({ error: "Unauthorized" }), {
               status: 401,
               headers: {
                 "Content-Type": "application/json",
-                ...corsHeaders
               }
             });
           }
@@ -154,11 +133,11 @@ export default {
       if (url.pathname === "/") {
         return handleHomePage();
       } else if (url.pathname === "/api/media") {
-        return handleListMedia(env, corsHeaders);
+        return handleListMedia(env);
       } else if (url.pathname.startsWith("/api/file/")) {
-        return handleGetFile(url, env, corsHeaders, request);
+        return handleGetFile(url, env, request);
       } else if (url.pathname.startsWith("/api/thumbnail/")) {
-        return handleGetThumbnail(url, env, corsHeaders, request);
+        return handleGetThumbnail(url, env, request);
       }
 
       return new Response("Not Found", { status: 404 });
@@ -288,7 +267,7 @@ export default {
   }
 
   // List all media files from D1 database
-  async function handleListMedia(env: Env, corsHeaders: Record<string, string>): Promise<Response> {
+  async function handleListMedia(env: Env): Promise<Response> {
     try {
       const result = await env.DB.prepare(`
         SELECT key, filename, type, size, uploaded_at, date_taken, camera_make, camera_model
@@ -361,7 +340,6 @@ export default {
       return new Response(JSON.stringify({ media }), {
         headers: {
           "Content-Type": "application/json",
-          ...corsHeaders
         },
       });
     } catch (error) {
@@ -370,14 +348,13 @@ export default {
         status: 500,
         headers: {
           "Content-Type": "application/json",
-          ...corsHeaders
         },
       });
     }
   }
 
   // Get thumbnail from R2
-  async function handleGetThumbnail(url: URL, env: Env, corsHeaders: Record<string, string>, request: Request): Promise<Response> {
+  async function handleGetThumbnail(url: URL, env: Env, request: Request): Promise<Response> {
     const key = decodeURIComponent(url.pathname.replace("/api/thumbnail/", ""));
     const size = url.searchParams.get("size") || "medium";
 
@@ -424,13 +401,11 @@ export default {
       object.writeHttpMetadata(headers);
       headers.set("Cache-Control", "public, max-age=2592000"); // Cache for 30 days
       headers.set("etag", object.httpEtag);
-      Object.keys(corsHeaders).forEach(key => headers.set(key, corsHeaders[key]));
 
       return new Response(object.body, { headers });
     } catch {
       return new Response("Failed to retrieve thumbnail", {
         status: 500,
-        headers: corsHeaders
       });
     }
   }
