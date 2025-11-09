@@ -11,6 +11,7 @@ export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv
   try {
     const url = new URL(request.url);
     const rawVideoKey = url.searchParams.get("key");
+    const token = url.searchParams.get("token"); // Auth token for iOS Safari
 
     if (!rawVideoKey) {
       return new Response(JSON.stringify({ error: "Missing key parameter" }), {
@@ -124,9 +125,14 @@ export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv
 
     for (const variantFile of variantFiles.sort().reverse()) {
       const metadata = qualityMetadata[variantFile] || estimateMetadata(variantFile);
+      // Append token to variant URLs for iOS Safari authentication
+      let variantUrl = `/api/hls/${videoKey}/${variantFile}`;
+      if (token) {
+        variantUrl += `?token=${encodeURIComponent(token)}`;
+      }
       masterLines.push(
         `#EXT-X-STREAM-INF:BANDWIDTH=${metadata.bandwidth},RESOLUTION=${metadata.resolution}`,
-        `/api/hls/${videoKey}/${variantFile}`
+        variantUrl
       );
     }
 

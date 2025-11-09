@@ -21,7 +21,12 @@ export default {
 
     // Check authentication if password is set
     if (env.GALLERY_PASSWORD) {
-      const authValue = getAuthCookie(request);
+      // Try to get auth from cookie first, then from query parameter
+      // Query parameter is needed for iOS Safari which doesn't send cookies with HLS requests
+      let authValue = getAuthCookie(request);
+      if (!authValue) {
+        authValue = url.searchParams.get("token") || "";
+      }
 
       // Use shared auth library with config adapter
       const authConfig = {
@@ -75,8 +80,9 @@ export default {
  * For .ts segments: serves directly from R2
  */
 async function handleGetHLS(url: URL, env: VideoStreamingEnv): Promise<Response> {
-  // URL format: /api/hls/{videoKey}/{filename}
+  // URL format: /api/hls/{videoKey}/{filename}?token=...
   const pathParts = url.pathname.replace("/api/hls/", "").split("/");
+  const token = url.searchParams.get("token"); // Auth token for iOS Safari
 
   if (pathParts.length < 2) {
     return new Response("Invalid HLS path", {
@@ -162,7 +168,25 @@ async function handleGetHLS(url: URL, env: VideoStreamingEnv): Promise<Response>
       return new Response(manifestStream, { headers });
     }
 
-    // For non-manifest files or when signing is disabled, serve directly
+    // For .m3u8 variant playlists when pre-signing is disabled:
+    // Rewrite segment URLs to include token for iOS Safari authentication
+    // (When pre-signing is enabled, segments use direct R2 URLs and bypass worker entirely)
+    if (filename.endsWith(".m3u8") && !isVideoSigningEnabled(env) && token) {
+      const manifestContent = await object.text();
+      // Rewrite relative segment URLs to include the token query parameter
+      // This ensures iOS Safari can authenticate when fetching .ts segments through the worker
+      const rewrittenManifest = manifestContent.replace(
+        /^([^#\n][^\n]*\.ts)$/gm,
+        `$1?token=${encodeURIComponent(token)}`
+      );
+
+      headers.set("Content-Type", "application/vnd.apple.mpegurl");
+      headers.set("Cache-Control", "private, max-age=3600"); // Private cache since it contains token
+
+      return new Response(rewrittenManifest, { headers });
+    }
+
+    // For non-manifest files or when no token provided, serve directly
     headers.set("Cache-Control", "public, max-age=2592000"); // Cache for 30 days
     headers.set("etag", object.httpEtag);
 

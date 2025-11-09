@@ -14,12 +14,31 @@ interface LightboxProps {
 
 export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
+  const [authToken, setAuthToken] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const isMobile = window.matchMedia('(max-width: 768px)').matches
 
   const currentItem = media[currentIndex]
   const isVideo = currentItem.type === 'video'
+
+  // Fetch auth token on mount for HLS URLs (needed for iOS Safari)
+  useEffect(() => {
+    async function fetchAuthToken() {
+      try {
+        const response = await fetch(`${API_BASE}/api/auth-token`, {
+          credentials: 'include'
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setAuthToken(data.token)
+        }
+      } catch (error) {
+        console.error('Failed to fetch auth token:', error)
+      }
+    }
+    fetchAuthToken()
+  }, [])
 
   // Helper to get original URL - supports both pre-signed URLs and proxy mode
   const getOriginalUrl = (item: MediaItem): string => {
@@ -62,7 +81,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
     }
 
     return () => cleanupVideo()
-  }, [currentIndex, isVideo])
+  }, [currentIndex, isVideo, authToken])
 
   const cleanupVideo = () => {
     if (hlsRef.current) {
@@ -79,7 +98,11 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
     if (!videoRef.current) return
 
     const video = videoRef.current
-    const hlsUrl = `${API_BASE}/api/hls/playlist?key=${currentItem.key}`
+    // Append auth token to HLS URL for iOS Safari compatibility
+    let hlsUrl = `${API_BASE}/api/hls/playlist?key=${currentItem.key}`
+    if (authToken) {
+      hlsUrl += `&token=${encodeURIComponent(authToken)}`
+    }
 
     try {
       if (Hls.isSupported()) {
@@ -110,7 +133,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
           }
         })
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS support (Safari)
+        // Native HLS support (Safari) - uses URL with token
         video.src = hlsUrl
         video.load()
       } else {
