@@ -198,6 +198,8 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
             controls
             className="max-h-[90vh] max-w-full"
             playsInline
+            disableRemotePlayback={false}
+            {...({ 'x-webkit-airplay': 'allow' } as any)}
           />
         ) : (
           <img
