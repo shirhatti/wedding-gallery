@@ -92,7 +92,7 @@ See the [Workspace Setup Guide](development/workspace-setup.md) for detailed ins
 
 - [GitHub Repository](https://github.com/shirhatti/wedding-gallery)
 - [DeepWiki Documentation](https://deepwiki.com/shirhatti/wedding-gallery)
-- [Full Documentation Index](README.md)
+- [Full Documentation Index](README.html)
 
 ## License
 
