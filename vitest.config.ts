@@ -10,11 +10,10 @@ export default defineWorkersConfig({
           configPath: "./workers/album/wrangler.toml",
         },
         miniflare: {
-          // Override bindings to use local mode (remove remote = true)
-          // This allows tests to run without authentication
-          bindings: {
-            // Bindings will use local simulations by default
-          }
+          // Override bindings to use local mode (not remote)
+          // This allows tests to run without authentication in CI
+          r2Buckets: ["PHOTOS_BUCKET"],
+          d1Databases: ["DB"],
         },
       },
     },
