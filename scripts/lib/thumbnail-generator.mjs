@@ -270,14 +270,24 @@ export async function extractExifMetadata(buffer) {
 
 /**
  * Extract dimensions from image buffer using sharp
+ * Accounts for EXIF orientation to match rotated thumbnail dimensions
  */
 export async function extractImageDimensions(buffer) {
   try {
     const metadata = await sharp(buffer).metadata();
-    return {
-      width: metadata.width || null,
-      height: metadata.height || null
-    };
+    let width = metadata.width || null;
+    let height = metadata.height || null;
+
+    // EXIF orientation values 5, 6, 7, 8 involve 90° or 270° rotation
+    // Sharp's .rotate() auto-rotates based on orientation, swapping dimensions
+    // We need to return the post-rotation dimensions to match the thumbnails
+    const orientation = metadata.orientation;
+    if (orientation >= 5 && orientation <= 8) {
+      // Swap width and height for 90° or 270° rotations
+      [width, height] = [height, width];
+    }
+
+    return { width, height };
   } catch (e) {
     return { width: null, height: null };
   }
