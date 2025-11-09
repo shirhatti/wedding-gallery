@@ -10,6 +10,8 @@ export interface AuthConfig {
   cacheVersion: {
     get(key: string): Promise<string | null>
   }
+  /** Set to true to disable auth checks entirely (for local development) */
+  disableAuth?: boolean
 }
 
 /**
@@ -47,6 +49,11 @@ export async function createAuthToken(config: AuthConfig, audience: string): Pro
  * @returns Promise<boolean> True if valid, false otherwise
  */
 export async function validateAuthToken(config: AuthConfig, audience: string, token: string): Promise<boolean> {
+  // Feature flag: bypass auth entirely if disabled (for local development)
+  if (config.disableAuth) {
+    return true
+  }
+
   const lastDot = token.lastIndexOf(".")
   if (lastDot <= 0) return false
   const payload = token.slice(0, lastDot)

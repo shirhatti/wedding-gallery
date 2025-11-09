@@ -7,3 +7,8 @@ binding = "PHOTOS_BUCKET"
 bucket_name = "wedding-photos"
 preview_bucket_name = "wedding-photos"
 remote = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "wedding-photos-metadata"
+database_id = "150012ba-e8d4-4e02-8769-aafd24fe08d0"

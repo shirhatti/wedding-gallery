@@ -4,7 +4,7 @@
   "private": true,
   "main": "src/index.ts",
   "scripts": {
-    "dev": "wrangler dev --remote",
+    "dev": "wrangler dev --remote --var DISABLE_AUTH:true",
     "deploy": "wrangler deploy"
   },
   "dependencies": {

@@ -4,6 +4,8 @@ export interface MediaItem {
   type: 'image' | 'video'
   size: number
   uploadedAt: string
+  width?: number
+  height?: number
   urls?: {
     thumbnailMedium: string
     original: string

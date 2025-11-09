@@ -3,14 +3,13 @@
  * Supports both images and videos
  */
 
-import Database from 'better-sqlite3';
 import { unstable_dev } from 'wrangler';
 import { execSync } from 'child_process';
 import { generateThumbnails, uploadThumbnails } from './lib/thumbnail-generator.mjs';
 
-const DB_PATH = './wedding-photos-metadata.db';
 const DRY_RUN = !process.argv.includes('--generate');
 const FORCE_REGENERATE = process.argv.includes('--force');
+const USE_REMOTE = process.argv.includes('--remote');
 
 async function main() {
   console.log('Starting worker...');
@@ -18,25 +17,24 @@ async function main() {
   if (DRY_RUN) {
     console.log('🔍 DRY RUN MODE: Will only show what would be generated');
     console.log('   Run with --generate to actually create thumbnails');
-    console.log('   Add --force to regenerate all thumbnails\n');
+    console.log('   Add --force to regenerate all thumbnails');
+    console.log('   Add --remote to use remote bindings\n');
   } else {
     console.log(FORCE_REGENERATE ? '🔄 Force regenerate mode: Regenerating ALL thumbnails' : '📸 Generate mode: Creating missing thumbnails');
+    console.log(USE_REMOTE ? '☁️  Using remote bindings' : '💻 Using local bindings');
   }
 
   const worker = await unstable_dev('scripts/process-locally.ts', {
     config: 'scripts/wrangler-process-locally.toml',
     experimental: { disableExperimentalWarning: true },
-    local: false
+    local: !USE_REMOTE
   });
 
   try {
-    const db = new Database(DB_PATH);
-
-    // Get all media (images and videos) from database
-    const media = db.prepare(`
-      SELECT key, type FROM media
-      WHERE type IN ('image', 'video')
-    `).all();
+    // Get all media (images and videos) from database via worker API
+    console.log('Fetching media list from database...');
+    const mediaResp = await worker.fetch('http://localhost/list-media');
+    const { media } = await mediaResp.json();
 
     console.log(`Found ${media.length} media items in database (images and videos)`);
 
@@ -101,8 +99,6 @@ async function main() {
         failed++;
       }
     }
-
-    db.close();
 
     console.log(`\nDone!`);
     if (DRY_RUN) {

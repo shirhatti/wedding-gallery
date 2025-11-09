@@ -7,7 +7,7 @@
 import { unstable_dev } from 'wrangler';
 import { execSync } from 'child_process';
 import { writeFileSync } from 'fs';
-import { generateThumbnails, uploadThumbnails, extractExifMetadata, extractVideoMetadata } from './lib/thumbnail-generator.mjs';
+import { generateThumbnails, uploadThumbnails, extractExifMetadata, extractVideoMetadata, extractImageDimensions } from './lib/thumbnail-generator.mjs';
 
 async function main() {
   console.log('Starting worker...');
@@ -62,53 +62,65 @@ async function main() {
 
         // Extract metadata (EXIF for images, video metadata for videos)
         let metadata = null;
+        let dimensions = { width: null, height: null };
+
         if (mediaType === 'image') {
           metadata = await extractExifMetadata(buffer);
+          // Extract dimensions using sharp (more reliable than EXIF)
+          dimensions = await extractImageDimensions(buffer);
         } else if (mediaType === 'video') {
           metadata = await extractVideoMetadata(buffer);
-        }
-
-        // Collect metadata update SQL for batch execution later
-        if (metadata) {
-          const normalize = (val) => {
-            if (val === null || val === undefined) return null;
-            if (typeof val === 'object') return null;
-            return val;
+          // Video metadata includes dimensions
+          dimensions = {
+            width: metadata?.width || null,
+            height: metadata?.height || null
           };
-
-          const escape = (val) => val ? `'${String(val).replace(/'/g, "''")}'` : 'NULL';
-
-          let updateSql;
-          if (mediaType === 'image') {
-            // Image EXIF data
-            updateSql = `
-              UPDATE media SET
-                date_taken = ${escape(normalize(metadata?.DateTimeOriginal))},
-                camera_make = ${escape(normalize(metadata?.Make))},
-                camera_model = ${escape(normalize(metadata?.Model))},
-                lens = ${escape(normalize(metadata?.LensModel))},
-                focal_length = ${normalize(metadata?.FocalLength) || 'NULL'},
-                aperture = ${normalize(metadata?.FNumber) || 'NULL'},
-                shutter_speed = ${normalize(metadata?.ExposureTime) || 'NULL'},
-                iso = ${normalize(metadata?.ISO) || 'NULL'},
-                latitude = ${normalize(metadata?.latitude) || 'NULL'},
-                longitude = ${normalize(metadata?.longitude) || 'NULL'},
-                altitude = ${normalize(metadata?.GPSAltitude) || 'NULL'},
-                metadata = ${escape(JSON.stringify(metadata))},
-                updated_at = ${escape(new Date().toISOString())}
-              WHERE key = ${escape(key)}`;
-          } else {
-            // Video metadata
-            updateSql = `
-              UPDATE media SET
-                date_taken = ${escape(normalize(metadata?.creation_time))},
-                metadata = ${escape(JSON.stringify(metadata))},
-                updated_at = ${escape(new Date().toISOString())}
-              WHERE key = ${escape(key)}`;
-          }
-
-          exifUpdates.push(updateSql);
         }
+
+        // Always update dimensions + metadata
+        const normalize = (val) => {
+          if (val === null || val === undefined) return null;
+          if (typeof val === 'object') return null;
+          return val;
+        };
+
+        const escape = (val) => val ? `'${String(val).replace(/'/g, "''")}'` : 'NULL';
+
+        let updateSql;
+        if (mediaType === 'image') {
+          // Image EXIF data + dimensions
+          updateSql = `
+            UPDATE media SET
+              date_taken = ${escape(normalize(metadata?.DateTimeOriginal))},
+              camera_make = ${escape(normalize(metadata?.Make))},
+              camera_model = ${escape(normalize(metadata?.Model))},
+              lens = ${escape(normalize(metadata?.LensModel))},
+              focal_length = ${normalize(metadata?.FocalLength) || 'NULL'},
+              aperture = ${normalize(metadata?.FNumber) || 'NULL'},
+              shutter_speed = ${normalize(metadata?.ExposureTime) || 'NULL'},
+              iso = ${normalize(metadata?.ISO) || 'NULL'},
+              latitude = ${normalize(metadata?.latitude) || 'NULL'},
+              longitude = ${normalize(metadata?.longitude) || 'NULL'},
+              altitude = ${normalize(metadata?.GPSAltitude) || 'NULL'},
+              width = ${dimensions.width || 'NULL'},
+              height = ${dimensions.height || 'NULL'},
+              metadata = ${escape(metadata ? JSON.stringify(metadata) : null)},
+              updated_at = ${escape(new Date().toISOString())}
+            WHERE key = ${escape(key)}`;
+        } else {
+          // Video metadata + dimensions
+          updateSql = `
+            UPDATE media SET
+              date_taken = ${escape(normalize(metadata?.creation_time))},
+              duration = ${normalize(metadata?.duration) || 'NULL'},
+              width = ${dimensions.width || 'NULL'},
+              height = ${dimensions.height || 'NULL'},
+              metadata = ${escape(metadata ? JSON.stringify(metadata) : null)},
+              updated_at = ${escape(new Date().toISOString())}
+            WHERE key = ${escape(key)}`;
+        }
+
+        exifUpdates.push(updateSql);
 
         // Generate thumbnails (handles both images and videos)
         const thumbnails = await generateThumbnails(buffer, mediaType, key);

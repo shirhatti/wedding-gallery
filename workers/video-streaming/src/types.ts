@@ -15,4 +15,5 @@ export interface VideoStreamingEnv {
   // Authentication (shared with viewer worker)
   GALLERY_PASSWORD?: string;
   AUTH_SECRET?: string;
+  DISABLE_AUTH?: string; // Disable auth entirely (for local dev - set to "true")
 }

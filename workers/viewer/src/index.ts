@@ -9,6 +9,7 @@ interface Env {
   CACHE_VERSION: KVNamespace;
   GALLERY_PASSWORD?: string; // Simple password for gallery access
   AUTH_SECRET?: string; // Secret used to sign auth cookie
+  DISABLE_AUTH?: string; // Disable auth entirely (for local dev - set to "true")
   // R2 signing credentials (optional)
   R2_ACCESS_KEY_ID?: string;
   R2_SECRET_ACCESS_KEY?: string;
@@ -58,7 +59,11 @@ export default {
         audience = audience || url.origin;
 
         const valid = await validateAuthToken(
-          { secret: env.AUTH_SECRET!, cacheVersion: env.CACHE_VERSION },
+          {
+            secret: env.AUTH_SECRET!,
+            cacheVersion: env.CACHE_VERSION,
+            disableAuth: env.DISABLE_AUTH === "true"
+          },
           audience,
           authValue
         );
@@ -99,7 +104,7 @@ export default {
   async function handleListMedia(env: Env): Promise<Response> {
     try {
       const result = await env.DB.prepare(`
-        SELECT key, filename, type, size, uploaded_at, date_taken, camera_make, camera_model
+        SELECT key, filename, type, size, uploaded_at, date_taken, camera_make, camera_model, width, height
         FROM media
         ORDER BY COALESCE(date_taken, uploaded_at) ASC
       `).all();
@@ -113,6 +118,8 @@ export default {
         date_taken: string | null;
         camera_make: string | null;
         camera_model: string | null;
+        width: number | null;
+        height: number | null;
       }
 
       // Only generate pre-signed URLs when explicitly enabled
@@ -132,6 +139,8 @@ export default {
         dateTaken: string | null;
         cameraMake: string | null;
         cameraModel: string | null;
+        width?: number;
+        height?: number;
         urls?: {
           thumbnailMedium: string;
           original: string;
@@ -150,6 +159,12 @@ export default {
           cameraMake: r.camera_make,
           cameraModel: r.camera_model,
         };
+
+        // Add dimensions if available
+        if (r.width && r.height) {
+          mediaItem.width = r.width;
+          mediaItem.height = r.height;
+        }
 
         // Add pre-signed URLs if signing is configured
         if (signingConfig) {

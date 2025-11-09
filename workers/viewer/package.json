@@ -4,8 +4,8 @@
   "private": true,
   "main": "src/index.ts",
   "scripts": {
-    "dev": "wrangler dev --remote --var ENABLE_PRESIGNED_URLS:true",
-    "dev:local": "wrangler dev",
+    "dev": "wrangler dev --remote --var ENABLE_PRESIGNED_URLS:true --var DISABLE_AUTH:true",
+    "dev:local": "wrangler dev --var DISABLE_AUTH:true",
     "deploy": "wrangler deploy"
   },
   "dependencies": {

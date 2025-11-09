@@ -84,7 +84,7 @@ export async function uploadToR2(worker, key, buffer, contentType = 'image/webp'
 }
 
 /**
- * Extract metadata from video file (creation time, etc.)
+ * Extract metadata from video file (creation time, dimensions, etc.)
  */
 export async function extractVideoMetadata(videoBuffer) {
   const tempVideoPath = join(tmpdir(), `probe-${Date.now()}.mp4`);
@@ -110,9 +110,16 @@ export async function extractVideoMetadata(videoBuffer) {
     const metadata = parseFfprobeJson(output);
     const creationTime = metadata.format?.tags?.creation_time || null;
 
+    // Extract dimensions from video stream
+    const videoStream = metadata.streams?.find(s => s.codec_type === 'video');
+    const width = videoStream?.width || null;
+    const height = videoStream?.height || null;
+
     return {
       creation_time: creationTime,
       duration: parseFloat(metadata.format?.duration || 0) || 0,
+      width,
+      height,
       metadata
     };
   } catch (error) {
@@ -194,9 +201,10 @@ export async function generateImageThumbnails(buffer, filename = '') {
   }
 
   // Generate thumbnails (rotate() auto-rotates based on EXIF orientation)
+  // Use 'inside' fit to preserve aspect ratios for natural-looking masonry layout
   const [small, medium, large] = await Promise.all([
-    sharp(processBuffer).rotate().resize(150, 150, { fit: 'cover' }).webp({ quality: 80 }).toBuffer(),
-    sharp(processBuffer).rotate().resize(400, 400, { fit: 'cover' }).webp({ quality: 85 }).toBuffer(),
+    sharp(processBuffer).rotate().resize(150, 150, { fit: 'inside' }).webp({ quality: 80 }).toBuffer(),
+    sharp(processBuffer).rotate().resize(400, 400, { fit: 'inside' }).webp({ quality: 85 }).toBuffer(),
     sharp(processBuffer).rotate().resize(800, 800, { fit: 'inside' }).webp({ quality: 90 }).toBuffer(),
   ]);
 
@@ -211,9 +219,10 @@ export async function generateVideoThumbnails(videoBuffer) {
   const frameBuffer = await extractVideoThumbnail(videoBuffer);
 
   // Generate thumbnails from the extracted frame (no rotation needed for video frames)
+  // Use 'inside' fit to preserve aspect ratios for natural-looking masonry layout
   const [small, medium, large] = await Promise.all([
-    sharp(frameBuffer).resize(150, 150, { fit: 'cover' }).webp({ quality: 80 }).toBuffer(),
-    sharp(frameBuffer).resize(400, 400, { fit: 'cover' }).webp({ quality: 85 }).toBuffer(),
+    sharp(frameBuffer).resize(150, 150, { fit: 'inside' }).webp({ quality: 80 }).toBuffer(),
+    sharp(frameBuffer).resize(400, 400, { fit: 'inside' }).webp({ quality: 85 }).toBuffer(),
     sharp(frameBuffer).resize(800, 800, { fit: 'inside' }).webp({ quality: 90 }).toBuffer(),
   ]);
 
@@ -243,18 +252,33 @@ export async function uploadThumbnails(worker, key, thumbnails) {
 }
 
 /**
- * Extract EXIF metadata from an image buffer
+ * Extract EXIF metadata from an image buffer (including dimensions)
  */
 export async function extractExifMetadata(buffer) {
   try {
     const exif = await exifr.parse(buffer, {
       pick: ['DateTimeOriginal', 'Make', 'Model', 'LensModel',
              'FocalLength', 'FNumber', 'ExposureTime', 'ISO',
-             'latitude', 'longitude', 'GPSAltitude']
+             'latitude', 'longitude', 'GPSAltitude', 'ImageWidth', 'ImageHeight']
     });
     return exif;
   } catch (e) {
     // No EXIF data or error parsing
     return null;
+  }
+}
+
+/**
+ * Extract dimensions from image buffer using sharp
+ */
+export async function extractImageDimensions(buffer) {
+  try {
+    const metadata = await sharp(buffer).metadata();
+    return {
+      width: metadata.width || null,
+      height: metadata.height || null
+    };
+  } catch (e) {
+    return { width: null, height: null };
   }
 }

@@ -5,18 +5,19 @@ import { cn } from '@/lib/utils'
 interface LazyImageProps {
   src: string
   alt: string
+  aspectRatio?: number // width / height
   className?: string
   onLoad?: () => void
 }
 
-export function LazyImage({ src, alt, className, onLoad }: LazyImageProps) {
+export function LazyImage({ src, alt, aspectRatio, className, onLoad }: LazyImageProps) {
   const [imageSrc, setImageSrc] = useState<string | null>(null)
   const [isLoaded, setIsLoaded] = useState(false)
   const isMobile = window.matchMedia('(max-width: 768px)').matches
 
-  // More aggressive prefetching on mobile
+  // Much more aggressive prefetching to handle scrolling to bottom
   const { ref, isIntersecting } = useIntersectionObserver({
-    rootMargin: isMobile ? '200px 0px' : '100px 0px',
+    rootMargin: isMobile ? '3000px 0px' : '2000px 0px',
     threshold: 0.01,
   })
 
@@ -32,14 +33,18 @@ export function LazyImage({ src, alt, className, onLoad }: LazyImageProps) {
   }
 
   return (
-    <div ref={ref} className="h-full w-full">
+    <div
+      ref={ref}
+      className="w-full relative"
+      style={aspectRatio ? { aspectRatio: aspectRatio.toString() } : undefined}
+    >
       {imageSrc && (
         <img
           src={imageSrc}
           alt={alt}
           onLoad={handleLoad}
           className={cn(
-            'h-full w-full object-cover transition-opacity duration-300',
+            'w-full h-auto transition-opacity duration-300',
             isLoaded ? 'opacity-100' : 'opacity-0',
             className
           )}

@@ -9,16 +9,17 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "hls.js": "^1.5.15",
+    "@wedding-gallery/auth": "*",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
-    "lucide-react": "^0.447.0",
-    "tailwind-merge": "^2.5.4",
-    "@wedding-gallery/auth": "*",
     "cookie": "^0.7.2",
-    "react-router-dom": "^7.1.3"
+    "hls.js": "^1.5.15",
+    "lucide-react": "^0.447.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-masonry-css": "^1.0.16",
+    "react-router-dom": "^7.1.3",
+    "tailwind-merge": "^2.5.4"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

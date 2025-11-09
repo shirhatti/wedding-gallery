@@ -33,7 +33,8 @@ export default {
         secret: env.AUTH_SECRET || "",
         cacheVersion: {
           get: async (key: string) => env.VIDEO_CACHE.get(key)
-        }
+        },
+        disableAuth: env.DISABLE_AUTH === "true"
       };
 
       // Use the same audience as the viewer worker (frontend origin)

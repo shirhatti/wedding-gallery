@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Play } from 'lucide-react'
+import Masonry from 'react-masonry-css'
 import { MediaItem } from '@/types'
 import { Lightbox } from './Lightbox'
 import { LazyImage } from './LazyImage'
@@ -12,6 +13,14 @@ export function Gallery() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
+
+  // Responsive breakpoints for masonry columns
+  const breakpointColumns = {
+    default: 5,
+    1536: 4,
+    1024: 3,
+    640: 2
+  }
 
   useEffect(() => {
     loadMedia()
@@ -98,41 +107,50 @@ export function Gallery() {
           />
         </div>
 
-        {/* Gallery Grid */}
-        <div className="mx-auto px-0 md:px-4">
-          <div className="grid grid-cols-3 gap-0.5 md:grid-cols-[repeat(auto-fill,minmax(200px,1fr))] md:gap-2.5">
+        {/* Gallery Grid - Masonry Layout */}
+        <div className="mx-auto max-w-[1600px] px-2 md:px-6">
+          <Masonry
+            breakpointCols={breakpointColumns}
+            className="flex -ml-4 w-auto"
+            columnClassName="pl-4 bg-clip-padding"
+          >
             {media.map((item, index) => (
               <button
                 key={item.key}
                 onClick={() => setSelectedIndex(index)}
                 className={cn(
-                  "group relative aspect-square overflow-hidden bg-zinc-800",
-                  "transition-transform hover:scale-105 md:rounded-md",
+                  "group relative mb-4 overflow-hidden rounded-lg shadow-lg w-full",
+                  "transition-all duration-300 hover:shadow-2xl hover:shadow-zinc-950/50 hover:-translate-y-1",
                   "focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-zinc-900"
                 )}
               >
-                {/* Thumbnail */}
-                <LazyImage
-                  src={getThumbnailUrl(item)}
-                  alt={item.name}
-                />
+                {/* Thumbnail with natural aspect ratio */}
+                <div className="relative w-full">
+                  <LazyImage
+                    src={getThumbnailUrl(item)}
+                    alt={item.name}
+                    aspectRatio={item.width && item.height ? item.width / item.height : undefined}
+                  />
+                  {/* Subtle gradient overlay on hover */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                </div>
 
                 {/* Video indicator */}
                 {item.type === 'video' && (
                   <>
-                    <div className="absolute right-2 top-2 flex items-center gap-1 rounded bg-black/70 px-2 py-1 text-xs text-white">
+                    <div className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/80 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm">
                       Video
                     </div>
-                    <div className="absolute inset-0 flex items-center justify-center opacity-80 transition-opacity group-hover:opacity-100">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-black/70">
-                        <Play className="h-6 w-6 text-white ml-0.5" fill="white" />
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/90 shadow-xl backdrop-blur-sm transition-transform duration-300 group-hover:scale-110">
+                        <Play className="h-7 w-7 text-zinc-900 ml-1" fill="currentColor" />
                       </div>
                     </div>
                   </>
                 )}
               </button>
             ))}
-          </div>
+          </Masonry>
         </div>
       </div>
 

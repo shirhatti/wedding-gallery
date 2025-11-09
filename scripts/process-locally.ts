@@ -6,11 +6,25 @@ import * as exifr from 'exifr';
 
 interface Env {
   PHOTOS_BUCKET: R2Bucket;
+  DB: D1Database;
 }
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+
+    if (url.pathname === '/list-media') {
+      // List all media from database
+      const result = await env.DB.prepare(`
+        SELECT key, type FROM media
+        WHERE type IN ('image', 'video')
+        ORDER BY key
+      `).all();
+
+      return new Response(JSON.stringify({ media: result.results }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
 
     if (url.pathname === '/list') {
       // List all objects
