@@ -61,44 +61,32 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
 
-      - name: Cache Claude Code installation
+      - name: Cache Claude Code binary
         id: cache-claude
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.local/bin
-            ~/.claude
-          key: ${{ runner.os }}-claude-${{ steps.action-deps.outputs.hash }}
+          path: /home/runner/.claude
+          key: ${{ runner.os }}-claude-binary-${{ steps.action-deps.outputs.hash }}
           restore-keys: |
-            ${{ runner.os }}-claude-
+            ${{ runner.os }}-claude-binary-
 
       - name: Debug cache status
         run: |
           echo "=== Cache Status ==="
-          echo "Dependency hash: ${{ steps.action-deps.outputs.hash }}"
-          echo "Bun cache key: ${{ runner.os }}-bun-${{ steps.action-deps.outputs.hash }}"
-          echo "Claude cache key: ${{ runner.os }}-claude-${{ steps.action-deps.outputs.hash }}"
-          echo ""
+          echo "Cache key: ${{ runner.os }}-bun-${{ steps.action-deps.outputs.hash }}"
           echo "Bun cache hit: ${{ steps.cache-bun.outputs.cache-hit }}"
           echo "Claude cache hit: ${{ steps.cache-claude.outputs.cache-hit }}"
           echo ""
           echo "=== Cached Directory Status ==="
           if [ -d ~/.bun/install/cache ]; then
-            echo "Bun cache: $(du -sh ~/.bun/install/cache 2>/dev/null || echo 'empty')"
-            echo "  Files: $(find ~/.bun/install/cache -type f 2>/dev/null | wc -l)"
+            echo "Bun cache exists: $(du -sh ~/.bun/install/cache 2>/dev/null || echo 'empty')"
           else
-            echo "Bun cache: does not exist"
+            echo "Bun cache does not exist"
           fi
-          if [ -d ~/.local/bin ]; then
-            echo "Claude binary: $(du -sh ~/.local/bin 2>/dev/null || echo 'empty')"
-            echo "  Files: $(ls -la ~/.local/bin 2>/dev/null | grep -c '^-' || echo '0')"
+          if [ -d /home/runner/.claude ]; then
+            echo "Claude binary cache exists: $(du -sh /home/runner/.claude 2>/dev/null || echo 'empty')"
           else
-            echo "Claude binary: does not exist"
-          fi
-          if [ -d ~/.claude ]; then
-            echo "Claude config: $(du -sh ~/.claude 2>/dev/null || echo 'empty')"
-          else
-            echo "Claude config: does not exist"
+            echo "Claude binary cache does not exist"
           fi
 
       - name: Run Claude Code Review
