@@ -1,4 +1,3 @@
-import { handleHomePage } from "./handlers/home";
 import { handleGetFile } from "./handlers/media";
 import { signR2Url, getSigningConfig } from "@wedding-gallery/shared-video-lib";
 import { validateAuthToken, getAuthCookie } from "@wedding-gallery/auth";
@@ -81,9 +80,7 @@ export default {
       }
 
       // Route handling - media and auth only (video streaming handled by separate worker)
-      if (url.pathname === "/") {
-        return handleHomePage();
-      } else if (url.pathname === "/api/media") {
+      if (url.pathname === "/api/media") {
         return handleListMedia(env);
       } else if (url.pathname.startsWith("/api/file/")) {
         return handleGetFile(url, env, request);
