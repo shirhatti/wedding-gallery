@@ -1,6 +1,7 @@
 import { handleGetFile } from "./handlers/media";
 import { signR2Url, getSigningConfig } from "@wedding-gallery/shared-video-lib";
 import { validateAuthToken, getAuthCookie } from "@wedding-gallery/auth";
+import { createPrismaClient } from "./lib/prisma";
 
 interface Env {
   R2_BUCKET: R2Bucket;
@@ -97,24 +98,41 @@ export default {
     },
   };
 
-  // List all media files from D1 database
+  // List all media files from D1 database using Prisma
   async function handleListMedia(env: Env): Promise<Response> {
     try {
-      const result = await env.DB.prepare(`
-        SELECT key, filename, type, size, uploaded_at, date_taken, camera_make, camera_model, width, height
-        FROM media
-        ORDER BY COALESCE(date_taken, uploaded_at) ASC
-      `).all();
+      // Initialize Prisma Client with D1 adapter
+      const prisma = createPrismaClient(env.DB);
+
+      // Query media using Prisma
+      const mediaResults = await prisma.media.findMany({
+        select: {
+          key: true,
+          filename: true,
+          type: true,
+          size: true,
+          uploadedAt: true,
+          dateTaken: true,
+          cameraMake: true,
+          cameraModel: true,
+          width: true,
+          height: true,
+        },
+        orderBy: [
+          { dateTaken: "asc" },
+          { uploadedAt: "asc" }
+        ],
+      });
 
       interface MediaRow {
         key: string;
         filename: string;
         type: string;
-        size: number;
-        uploaded_at: string;
-        date_taken: string | null;
-        camera_make: string | null;
-        camera_model: string | null;
+        size: number | null;
+        uploadedAt: string | null;
+        dateTaken: string | null;
+        cameraMake: string | null;
+        cameraModel: string | null;
         width: number | null;
         height: number | null;
       }
@@ -144,32 +162,31 @@ export default {
         };
       }
 
-      const mediaPromises = result.results.map(async (row) => {
-        const r = row as MediaRow;
+      const mediaPromises = mediaResults.map(async (row) => {
         const mediaItem: MediaItemResponse = {
-          key: r.key,
-          name: r.filename,
-          size: r.size,
-          type: r.type,
-          uploadedAt: r.uploaded_at,
-          dateTaken: r.date_taken,
-          cameraMake: r.camera_make,
-          cameraModel: r.camera_model,
+          key: row.key,
+          name: row.filename,
+          size: row.size ?? 0,
+          type: row.type,
+          uploadedAt: row.uploadedAt ?? "",
+          dateTaken: row.dateTaken,
+          cameraMake: row.cameraMake,
+          cameraModel: row.cameraModel,
         };
 
         // Add dimensions if available
-        if (r.width && r.height) {
-          mediaItem.width = r.width;
-          mediaItem.height = r.height;
+        if (row.width && row.height) {
+          mediaItem.width = row.width;
+          mediaItem.height = row.height;
         }
 
         // Add pre-signed URLs if signing is configured
         if (signingConfig) {
-          const thumbnailKey = `thumbnails/${r.key.replace(/\.[^.]+$/, "")}_medium.jpg`;
+          const thumbnailKey = `thumbnails/${row.key.replace(/\.[^.]+$/, "")}_medium.jpg`;
 
           mediaItem.urls = {
             thumbnailMedium: await signR2Url(signingConfig, thumbnailKey, 1800), // 30 min
-            original: await signR2Url(signingConfig, r.key, 1800), // 30 min
+            original: await signR2Url(signingConfig, row.key, 1800), // 30 min
           };
         }
 
