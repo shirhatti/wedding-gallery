@@ -378,6 +378,111 @@ This ensures database schema changes are tracked and reviewable.
 
 ---
 
+## 🔧 Maintenance Scripts Migration
+
+### Overview
+
+In addition to migrating all production workers, we've also created Prisma-based versions of maintenance scripts for better type safety and developer experience.
+
+### Scripts Migrated (2/2)
+
+| Script | Prisma Version | Status | Benefits |
+|--------|----------------|--------|----------|
+| `extract-all-dimensions.mjs` | `extract-all-dimensions-prisma.mjs` | ✅ Complete | Type-safe dimension updates |
+| `generate-thumbnails-from-pending.mjs` | `generate-thumbnails-from-pending-prisma.mjs` | ✅ Complete | Type-safe metadata extraction |
+
+### New Infrastructure
+
+**Prisma Client Helper** (`scripts/lib/prisma-client.mjs`):
+- `createLocalPrismaClient()` - Create Prisma client for local database
+- `PrismaBatchUpdater` - Helper for batching database operations
+- `toISOString()` - Convert dates to ISO format
+- `normalizeValue()` - Normalize metadata values
+
+### Script Usage
+
+```bash
+# Extract dimensions for all media
+npm run script:extract-dimensions
+
+# Generate thumbnails from pending queue
+npm run script:generate-thumbnails
+
+# Or run directly
+node scripts/extract-all-dimensions-prisma.mjs
+node scripts/generate-thumbnails-from-pending-prisma.mjs
+```
+
+### Before/After Comparison
+
+**Before** (Raw SQL with execSync):
+```javascript
+// Query database via wrangler CLI
+const result = execSync('npx wrangler d1 execute wedding-photos-metadata --command "SELECT key, type FROM media" --json --remote');
+
+// Build UPDATE SQL string manually
+const updateSql = `UPDATE media SET width = ${width}, height = ${height} WHERE key = '${key}'`;
+
+// Execute via wrangler CLI
+execSync('npx wrangler d1 execute wedding-photos-metadata --file=/tmp/update.sql --remote --yes');
+```
+
+**After** (Type-safe Prisma):
+```javascript
+// Query database with Prisma
+const allMedia = await prisma.media.findMany({
+  select: { key: true, type: true },
+  orderBy: { uploadedAt: 'asc' }
+});
+
+// Update with type-safe operation
+await prisma.media.update({
+  where: { key },
+  data: { width, height, updatedAt: toISOString() }
+});
+```
+
+### Key Advantages
+
+✅ **Type Safety**: Compile-time checking prevents field name typos
+✅ **No CLI Calls**: Direct database access via Prisma (faster)
+✅ **Batching**: Built-in transaction support for efficiency
+✅ **Better Errors**: Clear error messages from Prisma
+✅ **IDE Support**: Autocomplete for all database fields
+
+### Example: Batch Updates
+
+```javascript
+import { createLocalPrismaClient, PrismaBatchUpdater } from './lib/prisma-client.mjs';
+
+const prisma = createLocalPrismaClient();
+const batchUpdater = new PrismaBatchUpdater(prisma);
+
+// Add multiple updates
+for (const item of items) {
+  batchUpdater.add((tx) =>
+    tx.media.update({
+      where: { key: item.key },
+      data: { width: item.width, height: item.height }
+    })
+  );
+}
+
+// Execute all in single transaction
+await batchUpdater.execute();
+```
+
+### Documentation
+
+See **[PRISMA_SCRIPTS_GUIDE.md](./PRISMA_SCRIPTS_GUIDE.md)** for:
+- Detailed script documentation
+- Migration patterns
+- Best practices
+- Troubleshooting guide
+- Creating new Prisma scripts
+
+---
+
 ## 📖 Documentation
 
 ### Primary Resources
@@ -406,18 +511,29 @@ npm run dev
 
 ## 🎉 Conclusion
 
-The Prisma ORM migration is **complete and successful**. All three production workers now benefit from:
+The Prisma ORM migration is **complete and successful**. All production components now benefit from type-safe database access:
 
+### Workers (3/3 Migrated)
+✅ **Viewer Worker** - Type-safe media queries and listing
+✅ **Album Worker** - Type-safe upload and metadata insertion
+✅ **Video Streaming Worker** - Type-safe HLS quality lookups
+
+### Scripts (2/2 Migrated)
+✅ **Dimension Extraction** - Type-safe batch dimension updates
+✅ **Thumbnail Generation** - Type-safe metadata and EXIF processing
+
+### Benefits Delivered
 ✅ **Type-safe** database queries with compile-time checking
 ✅ **Better DX** with IDE autocomplete and inline documentation
 ✅ **Improved security** through automatic query parameterization
 ✅ **Easier testing** with local SQLite database
 ✅ **Maintainable schema** as code in version control
 ✅ **Zero performance impact** - bundle sizes well within limits
+✅ **Faster scripts** - Direct database access vs CLI calls
 
-The migration provides a solid foundation for future development, reducing bugs and improving developer productivity.
+The migration provides a solid foundation for future development, reducing bugs and improving developer productivity across both runtime workers and maintenance scripts.
 
 ---
 
 **Migration Completed**: ✅ November 9, 2025
-**Next Review**: Phase 4 script migration (future work)
+**Status**: All production workers and maintenance scripts migrated to Prisma ORM
