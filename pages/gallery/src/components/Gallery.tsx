@@ -5,17 +5,9 @@ import { MediaItem } from '@/types'
 import { Lightbox } from './Lightbox'
 import { LazyImage } from './LazyImage'
 import { cn } from '@/lib/utils'
+import { LAYOUT_BREAKPOINTS, THUMBNAIL_SIZES } from '@/lib/constants'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
-
-// Responsive sizes for thumbnail images based on masonry breakpoints
-// Matches the column layout: 2 cols (mobile) → 3 (tablet) → 4 (laptop) → 5 (desktop)
-const THUMBNAIL_SIZES = [
-  '(max-width: 640px) 50vw',   // 2 columns on mobile
-  '(max-width: 1024px) 33vw',  // 3 columns on tablet
-  '(max-width: 1536px) 25vw',  // 4 columns on laptop
-  '20vw'                        // 5 columns on desktop
-].join(', ')
 
 export function Gallery() {
   const [media, setMedia] = useState<MediaItem[]>([])
@@ -26,9 +18,9 @@ export function Gallery() {
   // Responsive breakpoints for masonry columns
   const breakpointColumns = {
     default: 5,
-    1536: 4,
-    1024: 3,
-    640: 2
+    [LAYOUT_BREAKPOINTS.LAPTOP]: 4,
+    [LAYOUT_BREAKPOINTS.TABLET]: 3,
+    [LAYOUT_BREAKPOINTS.MOBILE]: 2
   }
 
   useEffect(() => {

@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver'
 import { cn } from '@/lib/utils'
+import { MOBILE_BREAKPOINT, LAZY_LOAD_ROOT_MARGINS } from '@/lib/constants'
 
 interface LazyImageProps {
   src: string
@@ -44,25 +45,29 @@ export function LazyImage({ src, srcset, sizes, alt, aspectRatio, className, onL
   const [imageSrc, setImageSrc] = useState<string | null>(null)
   const imageSrcsetRef = useRef<string | null>(null)
   const [isLoaded, setIsLoaded] = useState(false)
+  const [hasError, setHasError] = useState(false)
 
   // Track mobile viewport state and update on resize/rotation
   const [isMobile, setIsMobile] = useState(() =>
-    window.matchMedia('(max-width: 768px)').matches
+    window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches
   )
 
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 768px)')
+    const mq = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`)
     const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
     mq.addEventListener('change', handler)
     return () => mq.removeEventListener('change', handler)
   }, [])
 
   // Much more aggressive prefetching to handle scrolling to bottom
-  // Updates when isMobile changes (e.g., device rotation, window resize)
-  const { ref, isIntersecting } = useIntersectionObserver({
-    rootMargin: isMobile ? '3000px 0px' : '2000px 0px',
+  // Memoize observer options to prevent unnecessary observer recreation
+  // Only recreate when isMobile changes (e.g., device rotation, window resize)
+  const observerOptions = useMemo(() => ({
+    rootMargin: isMobile ? LAZY_LOAD_ROOT_MARGINS.MOBILE : LAZY_LOAD_ROOT_MARGINS.DESKTOP,
     threshold: 0.01,
-  })
+  }), [isMobile])
+
+  const { ref, isIntersecting } = useIntersectionObserver(observerOptions)
 
   // Lazy load image when it enters viewport
   // Note: The !imageSrc guard ensures that once loading starts, the image sources
@@ -85,25 +90,51 @@ export function LazyImage({ src, srcset, sizes, alt, aspectRatio, className, onL
     onLoad?.()
   }
 
+  const handleError = () => {
+    setHasError(true)
+    console.error('Failed to load image:', src)
+  }
+
   return (
     <div
       ref={ref}
       className="w-full relative"
       style={aspectRatio ? { aspectRatio: aspectRatio.toString() } : undefined}
     >
-      {imageSrc && (
+      {imageSrc && !hasError && (
         <img
           src={imageSrc}
           srcSet={imageSrcsetRef.current || undefined}
           sizes={sizes}
           alt={alt}
           onLoad={handleLoad}
+          onError={handleError}
           className={cn(
             'w-full h-auto transition-opacity duration-300',
             isLoaded ? 'opacity-100' : 'opacity-0',
             className
           )}
         />
+      )}
+      {hasError && (
+        <div className="w-full flex items-center justify-center bg-zinc-800 text-zinc-400 text-sm p-8">
+          <div className="text-center">
+            <svg
+              className="mx-auto h-12 w-12 mb-2 opacity-50"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
+            </svg>
+            <p>Failed to load image</p>
+          </div>
+        </div>
       )}
     </div>
   )
