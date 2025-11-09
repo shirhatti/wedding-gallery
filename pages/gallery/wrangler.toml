@@ -2,17 +2,7 @@ name = "wedding-gallery-pages"
 compatibility_date = "2024-01-01"
 pages_build_output_dir = "dist"
 
-# Service bindings to route API requests to workers
-[[service_bindings]]
-binding = "VIEWER_WORKER"
-service = "viewer"
-
-[[service_bindings]]
-binding = "VIDEO_WORKER"
-service = "video-streaming"
-
-# Pages project configuration
-# Deploy with: wrangler pages deploy dist --project-name=wedding-gallery-pages
-
-# Environment variables (set via wrangler pages secret or dashboard):
-# VITE_API_BASE - Leave empty for same-origin API requests
+services = [
+  { binding = "VIEWER_WORKER", service = "viewer" },
+  { binding = "VIDEO_WORKER", service = "video-streaming" }
+]
