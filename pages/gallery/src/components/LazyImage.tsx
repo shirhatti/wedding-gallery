@@ -24,6 +24,13 @@ export function LazyImage({ src, srcset, sizes, alt, aspectRatio, className, onL
     threshold: 0.01,
   })
 
+  // Lazy load image when it enters viewport
+  // Note: The !imageSrc guard ensures that once loading starts, the image sources
+  // won't change even if props update. This is intentional to:
+  // 1. Prevent unnecessary re-renders during scroll
+  // 2. Avoid interrupting in-progress image loads
+  // 3. Stop the browser from re-selecting different srcset candidates mid-load
+  // If you need to update the image after loading, remount the component with a new key.
   useEffect(() => {
     if (isIntersecting && !imageSrc) {
       setImageSrc(src)

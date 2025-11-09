@@ -58,10 +58,14 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
 
   // Generate srcset for lightbox - use large thumbnail for smaller viewports, original for larger
   const getLightboxSrcset = (item: MediaItem): string => {
-    return [
-      `${getThumbnailUrl(item, 'large')} 800w`,
-      `${getOriginalUrl(item)} 2000w`,
-    ].join(', ')
+    const sources = [`${getThumbnailUrl(item, 'large')} 800w`]
+    // Use actual image width if available, otherwise assume 2000w for typical photos
+    if (item.width) {
+      sources.push(`${getOriginalUrl(item)} ${item.width}w`)
+    } else {
+      sources.push(`${getOriginalUrl(item)} 2000w`)
+    }
+    return sources.join(', ')
   }
 
   // Generate sizes for lightbox - optimize for viewport size

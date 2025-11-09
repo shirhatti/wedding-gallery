@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Play } from 'lucide-react'
 import Masonry from 'react-masonry-css'
 import { MediaItem } from '@/types'
@@ -54,12 +54,15 @@ export function Gallery() {
   }
 
   // Helper to get thumbnail URL - supports both pre-signed URLs and proxy mode
+  // Note: Pre-signed URLs (item.urls) are only generated for 'medium' size thumbnails
+  // to minimize backend processing. For 'small' and 'large' sizes, we always use
+  // the proxy API endpoint which can serve all three sizes on-demand.
   const getThumbnailUrl = (item: MediaItem, size: 'small' | 'medium' | 'large' = 'medium'): string => {
-    // Pre-signed URL mode only provides medium thumbnails, so fallback to proxy for other sizes
     if (size === 'medium' && item.urls?.thumbnailMedium) {
+      // Use pre-signed URL when available (reduces worker load)
       return item.urls.thumbnailMedium
     }
-    // Proxy mode supports all sizes
+    // Fall back to proxy mode for all other cases (local dev or non-medium sizes)
     return `${API_BASE}/api/thumbnail/${item.key}?size=${size}`
   }
 
@@ -73,15 +76,13 @@ export function Gallery() {
   }
 
   // Generate sizes attribute based on responsive breakpoints
-  // Each column takes up (100vw - padding) / columns
-  const getThumbnailSizes = (): string => {
-    return [
-      '(max-width: 640px) 50vw',   // 2 columns on mobile
-      '(max-width: 1024px) 33vw',  // 3 columns on tablet
-      '(max-width: 1536px) 25vw',  // 4 columns on laptop
-      '20vw'                        // 5 columns on desktop
-    ].join(', ')
-  }
+  // Memoized since it returns the same value for all images
+  const thumbnailSizes = useMemo(() => [
+    '(max-width: 640px) 50vw',   // 2 columns on mobile
+    '(max-width: 1024px) 33vw',  // 3 columns on tablet
+    '(max-width: 1536px) 25vw',  // 4 columns on laptop
+    '20vw'                        // 5 columns on desktop
+  ].join(', '), [])
 
   if (loading) {
     return (
@@ -149,7 +150,7 @@ export function Gallery() {
                   <LazyImage
                     src={getThumbnailUrl(item, 'medium')}
                     srcset={getThumbnailSrcset(item)}
-                    sizes={getThumbnailSizes()}
+                    sizes={thumbnailSizes}
                     alt={item.name}
                     aspectRatio={item.width && item.height ? item.width / item.height : undefined}
                   />
