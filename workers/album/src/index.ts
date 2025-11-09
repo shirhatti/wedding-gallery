@@ -4,6 +4,7 @@
  */
 
 import htmlContent from "./index.html";
+import { createPrismaClient } from "./lib/prisma";
 
 interface Env {
   PHOTOS_BUCKET: R2Bucket;
@@ -60,26 +61,37 @@ export default {
         const uploadedAt = new Date().toISOString();
         const fileType = isVideo ? "video" : "image";
 
+        // Initialize Prisma Client with D1 adapter
+        const prisma = createPrismaClient(env.DB);
+
         // Insert into media table (EXIF will be extracted by thumbnail generation job)
-        await env.DB.prepare(`
-          INSERT OR REPLACE INTO media (
-            key, filename, type, size, uploaded_at, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          fileName,
-          file.name,
-          fileType,
-          file.size,
-          uploadedAt,
-          uploadedAt,
-          uploadedAt
-        ).run();
+        // Use upsert to handle duplicate key constraint (replaces INSERT OR REPLACE)
+        await prisma.media.upsert({
+          where: { key: fileName },
+          create: {
+            key: fileName,
+            filename: file.name,
+            type: fileType,
+            size: file.size,
+            uploadedAt: uploadedAt,
+            createdAt: uploadedAt,
+            updatedAt: uploadedAt
+          },
+          update: {
+            filename: file.name,
+            type: fileType,
+            size: file.size,
+            uploadedAt: uploadedAt,
+            updatedAt: uploadedAt
+          }
+        });
 
         // Add to pending_thumbnails queue for processing
-        await env.DB.prepare(`
-          INSERT OR IGNORE INTO pending_thumbnails (key, created_at)
-          VALUES (?, ?)
-        `).bind(fileName, uploadedAt).run();
+        // Use createMany with skipDuplicates to handle INSERT OR IGNORE behavior
+        await prisma.pendingThumbnails.createMany({
+          data: [{ key: fileName, createdAt: uploadedAt }],
+          skipDuplicates: true
+        });
 
         return new Response(JSON.stringify({
           success: true,
