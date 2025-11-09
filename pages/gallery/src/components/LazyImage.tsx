@@ -4,14 +4,17 @@ import { cn } from '@/lib/utils'
 
 interface LazyImageProps {
   src: string
+  srcset?: string
+  sizes?: string
   alt: string
   aspectRatio?: number // width / height
   className?: string
   onLoad?: () => void
 }
 
-export function LazyImage({ src, alt, aspectRatio, className, onLoad }: LazyImageProps) {
+export function LazyImage({ src, srcset, sizes, alt, aspectRatio, className, onLoad }: LazyImageProps) {
   const [imageSrc, setImageSrc] = useState<string | null>(null)
+  const [imageSrcset, setImageSrcset] = useState<string | null>(null)
   const [isLoaded, setIsLoaded] = useState(false)
   const isMobile = window.matchMedia('(max-width: 768px)').matches
 
@@ -24,8 +27,11 @@ export function LazyImage({ src, alt, aspectRatio, className, onLoad }: LazyImag
   useEffect(() => {
     if (isIntersecting && !imageSrc) {
       setImageSrc(src)
+      if (srcset) {
+        setImageSrcset(srcset)
+      }
     }
-  }, [isIntersecting, src, imageSrc])
+  }, [isIntersecting, src, srcset, imageSrc])
 
   const handleLoad = () => {
     setIsLoaded(true)
@@ -41,6 +47,8 @@ export function LazyImage({ src, alt, aspectRatio, className, onLoad }: LazyImag
       {imageSrc && (
         <img
           src={imageSrc}
+          srcSet={imageSrcset || undefined}
+          sizes={sizes}
           alt={alt}
           onLoad={handleLoad}
           className={cn(

@@ -50,6 +50,28 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
     return `${API_BASE}/api/file/${encodeURIComponent(item.key)}`
   }
 
+  // Helper to get thumbnail URL
+  const getThumbnailUrl = (item: MediaItem, size: 'small' | 'medium' | 'large' = 'medium'): string => {
+    // Proxy mode supports all sizes
+    return `${API_BASE}/api/thumbnail/${item.key}?size=${size}`
+  }
+
+  // Generate srcset for lightbox - use large thumbnail for smaller viewports, original for larger
+  const getLightboxSrcset = (item: MediaItem): string => {
+    return [
+      `${getThumbnailUrl(item, 'large')} 800w`,
+      `${getOriginalUrl(item)} 2000w`,
+    ].join(', ')
+  }
+
+  // Generate sizes for lightbox - optimize for viewport size
+  const getLightboxSizes = (): string => {
+    return [
+      '(max-width: 768px) 100vw',  // Use large thumbnail on mobile
+      '90vw'                        // Use original on desktop
+    ].join(', ')
+  }
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -204,6 +226,8 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
         ) : (
           <img
             src={getOriginalUrl(currentItem)}
+            srcSet={getLightboxSrcset(currentItem)}
+            sizes={getLightboxSizes()}
             alt={currentItem.name}
             className="max-h-[90vh] max-w-full object-contain"
           />

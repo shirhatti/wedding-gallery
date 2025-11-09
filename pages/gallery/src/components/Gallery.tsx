@@ -54,13 +54,33 @@ export function Gallery() {
   }
 
   // Helper to get thumbnail URL - supports both pre-signed URLs and proxy mode
-  const getThumbnailUrl = (item: MediaItem): string => {
-    if (item.urls?.thumbnailMedium) {
-      // Pre-signed URL mode (when R2 credentials are configured)
+  const getThumbnailUrl = (item: MediaItem, size: 'small' | 'medium' | 'large' = 'medium'): string => {
+    // Pre-signed URL mode only provides medium thumbnails, so fallback to proxy for other sizes
+    if (size === 'medium' && item.urls?.thumbnailMedium) {
       return item.urls.thumbnailMedium
     }
-    // Fallback to proxy mode (local dev without R2 credentials)
-    return `${API_BASE}/api/thumbnail/${item.key}?size=medium`
+    // Proxy mode supports all sizes
+    return `${API_BASE}/api/thumbnail/${item.key}?size=${size}`
+  }
+
+  // Generate srcset for responsive images
+  const getThumbnailSrcset = (item: MediaItem): string => {
+    return [
+      `${getThumbnailUrl(item, 'small')} 150w`,
+      `${getThumbnailUrl(item, 'medium')} 400w`,
+      `${getThumbnailUrl(item, 'large')} 800w`,
+    ].join(', ')
+  }
+
+  // Generate sizes attribute based on responsive breakpoints
+  // Each column takes up (100vw - padding) / columns
+  const getThumbnailSizes = (): string => {
+    return [
+      '(max-width: 640px) 50vw',   // 2 columns on mobile
+      '(max-width: 1024px) 33vw',  // 3 columns on tablet
+      '(max-width: 1536px) 25vw',  // 4 columns on laptop
+      '20vw'                        // 5 columns on desktop
+    ].join(', ')
   }
 
   if (loading) {
@@ -127,7 +147,9 @@ export function Gallery() {
                 {/* Thumbnail with natural aspect ratio */}
                 <div className="relative w-full">
                   <LazyImage
-                    src={getThumbnailUrl(item)}
+                    src={getThumbnailUrl(item, 'medium')}
+                    srcset={getThumbnailSrcset(item)}
+                    sizes={getThumbnailSizes()}
                     alt={item.name}
                     aspectRatio={item.width && item.height ? item.width / item.height : undefined}
                   />
