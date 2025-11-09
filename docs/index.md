@@ -45,19 +45,19 @@ This application provides a secure, scalable gallery for sharing wedding photos 
 
 Comprehensive documentation is available in organized sections:
 
-### [Architecture](architecture/)
+### Architecture
 Technical documentation on system design and implementation:
 - [Architecture Overview](architecture/overview.md)
 - [Pages Migration Guide](architecture/pages-migration.md)
 - [HLS Video Implementation](architecture/hls-implementation.md)
 
-### [Operations](operations/)
+### Operations
 Runbooks and operational procedures:
 - [Token Revocation](operations/token-revocation.md)
 - [Break Glass Procedures](operations/breakglass.md)
 - [Upload Workflow](operations/upload-workflow.md)
 
-### [Development](development/)
+### Development
 Setup guides and development workflows:
 - [Workspace Setup](development/workspace-setup.md)
 - [Frontend Development](development/frontend-setup.md)
