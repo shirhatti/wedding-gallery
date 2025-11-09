@@ -1,0 +1,70 @@
+// Prisma schema for Wedding Gallery D1 Database
+// This schema matches the existing D1 database structure
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Media {
+  // Primary key
+  key String @id
+
+  // Basic file information
+  filename   String
+  type       String  // 'image' or 'video'
+  size       Int?
+  uploadedAt String? @map("uploaded_at") // ISO timestamp string
+
+  // EXIF metadata
+  dateTaken    String? @map("date_taken") // ISO timestamp string
+  cameraMake   String? @map("camera_make")
+  cameraModel  String? @map("camera_model")
+  lens         String?
+  focalLength  Float?  @map("focal_length")
+  aperture     Float?
+  shutterSpeed Float?  @map("shutter_speed")
+  iso          Int?
+
+  // GPS coordinates
+  latitude  Float?
+  longitude Float?
+  altitude  Float?
+
+  // Video metadata
+  duration Float?
+  codec    String?
+
+  // Dimensions
+  width  Int?
+  height Int?
+
+  // HLS streaming qualities (JSON array)
+  hlsQualities String? @map("hls_qualities")
+
+  // Thumbnail paths
+  thumbnailSmall  String? @map("thumbnail_small")
+  thumbnailMedium String? @map("thumbnail_medium")
+  thumbnailLarge  String? @map("thumbnail_large")
+
+  // Full EXIF metadata (JSON blob)
+  metadata String?
+
+  // Timestamps
+  processedAt String  @default("CURRENT_TIMESTAMP") @map("processed_at")
+  createdAt   String  @default("CURRENT_TIMESTAMP") @map("created_at")
+  updatedAt   String  @default("CURRENT_TIMESTAMP") @map("updated_at")
+
+  @@map("media")
+}
+
+model PendingThumbnails {
+  key       String @id
+  createdAt String @default("CURRENT_TIMESTAMP") @map("created_at")
+
+  @@map("pending_thumbnails")
+}
