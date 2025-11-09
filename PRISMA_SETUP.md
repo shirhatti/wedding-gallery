@@ -289,12 +289,15 @@ npm test workers/viewer/test
 - [x] All production workers now using type-safe Prisma queries
 - [x] Bundle sizes verified and within limits
 
-### Phase 4: 📋 Script Migration (Future)
-Scripts use Node.js with wrangler CLI commands and require different approach:
-- [ ] Migrate `generate-thumbnails-from-pending.mjs` to Prisma
-- [ ] Migrate `extract-all-dimensions.mjs` to Prisma
-- [ ] Migrate other maintenance scripts as needed
-- [ ] Consider creating Prisma-based script templates
+### Phase 4: ✅ Script Migration (Completed)
+Maintenance scripts migrated to use Prisma for type-safe database operations:
+- [x] Create Prisma client helper for Node.js scripts (`scripts/lib/prisma-client.mjs`)
+- [x] Migrate `generate-thumbnails-from-pending.mjs` to Prisma
+- [x] Migrate `extract-all-dimensions.mjs` to Prisma
+- [x] Create comprehensive scripts guide (`PRISMA_SCRIPTS_GUIDE.md`)
+- [x] Add npm scripts for common maintenance tasks
+
+**See [PRISMA_SCRIPTS_GUIDE.md](./PRISMA_SCRIPTS_GUIDE.md) for detailed documentation.**
 
 ### Phase 5: 📋 Cleanup (Future)
 - [ ] Remove legacy better-sqlite3 scripts (once fully migrated)

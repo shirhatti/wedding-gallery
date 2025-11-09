@@ -18,7 +18,11 @@
     "deploy:pages": "npm run build:pages && wrangler pages deploy pages/gallery/dist",
     "deploy:all": "npm run deploy:viewer && npm run deploy:album && npm run deploy:pages",
     "test": "vitest",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "prisma:studio": "npx prisma studio",
+    "prisma:generate": "npx prisma generate",
+    "script:extract-dimensions": "node scripts/extract-all-dimensions-prisma.mjs",
+    "script:generate-thumbnails": "node scripts/generate-thumbnails-from-pending-prisma.mjs"
   },
   "workspaces": [
     "packages/*",
