@@ -7,10 +7,11 @@ import { Button } from '@/components/ui/button'
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
 // Responsive sizes for lightbox images
-// Mobile uses large thumbnail (800px), desktop uses original
+// Explicitly cap mobile at 800px to ensure 800w srcset variant is selected
+// even on high-DPR devices (prevents unnecessary download of original)
 const LIGHTBOX_SIZES = [
-  '(max-width: 768px) 100vw',  // Use large thumbnail on mobile
-  '90vw'                        // Use original on desktop
+  '(max-width: 768px) 800px',  // Explicitly request 800w variant on mobile
+  '90vw'                        // Request based on viewport on desktop
 ].join(', ')
 
 interface LightboxProps {
@@ -57,19 +58,25 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
     return `${API_BASE}/api/file/${encodeURIComponent(item.key)}`
   }
 
-  // Helper to get thumbnail URL
+  // Helper to get thumbnail URL - supports both pre-signed URLs and proxy mode
+  // Uses same logic as Gallery component for consistency
   const getThumbnailUrl = (item: MediaItem, size: 'small' | 'medium' | 'large' = 'medium'): string => {
-    // Proxy mode supports all sizes
+    if (size === 'medium' && item.urls?.thumbnailMedium) {
+      // Use pre-signed URL when available (reduces worker load)
+      return item.urls.thumbnailMedium
+    }
+    // Fall back to proxy mode for all other cases (local dev or non-medium sizes)
     return `${API_BASE}/api/thumbnail/${item.key}?size=${size}`
   }
 
   // Generate srcset for lightbox - use large thumbnail for smaller viewports, original for larger
   const getLightboxSrcset = (item: MediaItem): string => {
     const sources = [`${getThumbnailUrl(item, 'large')} 800w`]
-    // Use actual image width if available, otherwise assume 2000w for typical photos
-    if (item.width) {
+    // Use actual image width if available and valid, otherwise assume 2000w for typical photos
+    if (item.width && item.width > 0) {
       sources.push(`${getOriginalUrl(item)} ${item.width}w`)
     } else {
+      // Fallback for missing/invalid width metadata
       sources.push(`${getOriginalUrl(item)} 2000w`)
     }
     return sources.join(', ')

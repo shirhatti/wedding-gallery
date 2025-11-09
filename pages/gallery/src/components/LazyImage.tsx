@@ -44,9 +44,21 @@ export function LazyImage({ src, srcset, sizes, alt, aspectRatio, className, onL
   const [imageSrc, setImageSrc] = useState<string | null>(null)
   const imageSrcsetRef = useRef<string | null>(null)
   const [isLoaded, setIsLoaded] = useState(false)
-  const isMobile = window.matchMedia('(max-width: 768px)').matches
+
+  // Track mobile viewport state and update on resize/rotation
+  const [isMobile, setIsMobile] = useState(() =>
+    window.matchMedia('(max-width: 768px)').matches
+  )
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)')
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
 
   // Much more aggressive prefetching to handle scrolling to bottom
+  // Updates when isMobile changes (e.g., device rotation, window resize)
   const { ref, isIntersecting } = useIntersectionObserver({
     rootMargin: isMobile ? '3000px 0px' : '2000px 0px',
     threshold: 0.01,
