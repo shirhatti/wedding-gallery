@@ -5,10 +5,12 @@
 
 import { handleHLSPlaylist } from "./handlers/hls";
 import { handleLazySegment } from "./handlers/lazy-segments";
-import { getSigningConfig } from "./lib/r2-signer";
-import { isVideoSigningEnabled } from "./lib/cached-url-signer";
-import { batchSignWithCache } from "./lib/batch-r2-signer";
-import { generateProgressiveManifest } from "./lib/progressive-manifest";
+import {
+  getSigningConfig,
+  isVideoSigningEnabled,
+  batchSignWithCache,
+  generateProgressiveManifest
+} from "@wedding-gallery/shared-video-lib";
 import { sanitizeVideoKey, sanitizeFilename } from "./lib/security";
 import type { VideoStreamingEnv } from "./types";
 

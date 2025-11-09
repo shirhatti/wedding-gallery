@@ -5,7 +5,7 @@
 
 import { Parser as M3U8Parser } from "m3u8-parser";
 
-interface ProgressiveManifestOptions {
+export interface ProgressiveManifestOptions {
   /**
    * Number of segments to sign immediately before streaming
    * Default: 5 (about 20 seconds of video at 4s per segment)

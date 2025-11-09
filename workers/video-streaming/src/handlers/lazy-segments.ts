@@ -4,8 +4,11 @@ import type { VideoStreamingEnv } from "../types";
  * Signs HLS segments on-demand and redirects to presigned URL
  */
 
-import { getSigningConfig } from "../lib/r2-signer";
-import { getCachedSignedUrl, isVideoSigningEnabled } from "../lib/cached-url-signer";
+import {
+  getSigningConfig,
+  getCachedSignedUrl,
+  isVideoSigningEnabled
+} from "@wedding-gallery/shared-video-lib";
 import { sanitizeVideoKey, sanitizeFilename } from "../lib/security";
 
 /**

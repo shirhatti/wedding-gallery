@@ -1,6 +1,6 @@
 import { handleHomePage } from "./handlers/home";
 import { handleGetFile } from "./handlers/media";
-import { signR2Url, getSigningConfig } from "./lib/r2-signer";
+import { signR2Url, getSigningConfig } from "@wedding-gallery/shared-video-lib";
 
 interface Env {
   R2_BUCKET: R2Bucket;

@@ -1,4 +1,4 @@
-import { rewriteMasterPlaylist } from "../lib/m3u8-handler";
+import { rewriteMasterPlaylist } from "@wedding-gallery/shared-video-lib";
 import { sanitizeVideoKey } from "../lib/security";
 import type { VideoStreamingEnv } from "../types";
 

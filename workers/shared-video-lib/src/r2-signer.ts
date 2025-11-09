@@ -1,10 +1,9 @@
-import type { VideoStreamingEnv } from "./types";
 /**
  * AWS Signature Version 4 signing for R2 pre-signed URLs
  * Lightweight implementation without full AWS SDK
  */
 
-interface SigningConfig {
+export interface SigningConfig {
   accessKeyId: string
   secretAccessKey: string
   region: string
@@ -119,14 +118,25 @@ export async function signR2Url(
 }
 
 /**
+ * Minimal environment interface for R2 signing configuration
+ */
+export interface R2SigningEnv {
+  R2_ACCESS_KEY_ID?: string;
+  R2_SECRET_ACCESS_KEY?: string;
+  R2_REGION?: string;
+  R2_BUCKET_NAME?: string;
+  R2_ACCOUNT_ID?: string;
+}
+
+/**
  * Helper to get signing config from environment
  */
-export function getSigningConfig(env: VideoStreamingEnv): SigningConfig {
+export function getSigningConfig(env: R2SigningEnv): SigningConfig {
   return {
-    accessKeyId: env.R2_ACCESS_KEY_ID,
-    secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+    accessKeyId: env.R2_ACCESS_KEY_ID || "",
+    secretAccessKey: env.R2_SECRET_ACCESS_KEY || "",
     region: env.R2_REGION || "auto",
-    bucket: env.R2_BUCKET_NAME,
-    accountId: env.R2_ACCOUNT_ID,
+    bucket: env.R2_BUCKET_NAME || "",
+    accountId: env.R2_ACCOUNT_ID || "",
   };
 }

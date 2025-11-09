@@ -1,18 +1,9 @@
-import type { VideoStreamingEnv } from "./types";
 /**
  * KV-cached URL signing for video content
  * Caches pre-signed URLs for 4 hours to avoid CPU thrashing
  */
 
-import { signR2Url } from "./r2-signer";
-
-interface SigningConfig {
-  accessKeyId: string
-  secretAccessKey: string
-  region: string
-  bucket: string
-  accountId: string
-}
+import { signR2Url, type SigningConfig, type R2SigningEnv } from "./r2-signer";
 
 /**
  * Generate a pre-signed URL with KV caching
@@ -56,7 +47,7 @@ export async function getCachedSignedUrl(
  * Helper to check if video signing should be enabled
  * Video signing is always enabled when R2 credentials are available
  */
-export function isVideoSigningEnabled(env: VideoStreamingEnv): boolean {
+export function isVideoSigningEnabled(env: R2SigningEnv): boolean {
   return !!(
     env.R2_ACCESS_KEY_ID &&
     env.R2_SECRET_ACCESS_KEY &&
