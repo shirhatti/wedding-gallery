@@ -5,6 +5,7 @@
 export interface VideoStreamingEnv {
   R2_BUCKET: R2Bucket;
   VIDEO_CACHE: KVNamespace;
+  DB: D1Database;
   // R2 signing credentials
   R2_ACCESS_KEY_ID?: string;
   R2_SECRET_ACCESS_KEY?: string;

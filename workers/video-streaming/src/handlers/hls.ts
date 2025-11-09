@@ -1,4 +1,3 @@
-import { rewriteMasterPlaylist } from "@wedding-gallery/shared-video-lib";
 import { sanitizeVideoKey } from "../lib/security";
 import type { VideoStreamingEnv } from "../types";
 
@@ -26,9 +25,38 @@ export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv
     // Sanitize video key to prevent path traversal attacks
     const videoKey = sanitizeVideoKey(rawVideoKey);
 
+    // Query database for available quality levels (needed for cache key)
+    const result = await env.DB.prepare(
+      "SELECT hls_qualities FROM media WHERE key = ?"
+    ).bind(videoKey).first();
+
+    if (!result || !result.hls_qualities) {
+      return new Response(JSON.stringify({ error: "HLS variants not found in database" }), {
+        status: 404,
+        headers: {
+          "Content-Type": "application/json",
+          ...corsHeaders,
+        },
+      });
+    }
+
+    // Parse quality levels from database (stored as JSON array like ["1080p", "360p"])
+    const qualityLevels: string[] = JSON.parse(result.hls_qualities as string);
+    const variantFiles = qualityLevels.map(q => `${q}.m3u8`);
+
+    if (variantFiles.length === 0) {
+      return new Response(JSON.stringify({ error: "No HLS variants available" }), {
+        status: 404,
+        headers: {
+          "Content-Type": "application/json",
+          ...corsHeaders,
+        },
+      });
+    }
+
     // Calculate time window for caching (4-hour buckets)
     const timeWindow = Math.floor(Date.now() / 1000 / 14400);
-    const manifestCacheKey = `manifest:master:${videoKey}:${timeWindow}`;
+    const manifestCacheKey = `manifest:master:v3:${videoKey}:${timeWindow}`;
 
     // Check manifest cache (fastest path - single KV read)
     const cachedManifest = await env.VIDEO_CACHE.get(manifestCacheKey);
@@ -43,35 +71,66 @@ export async function handleHLSPlaylist(request: Request, env: VideoStreamingEnv
       });
     }
 
-    // Fetch the HLS master playlist from R2
-    const playlistKey = `hls/${videoKey}/master.m3u8`;
-    const playlistObj = await env.R2_BUCKET.get(playlistKey);
+    // Quality preset metadata (matches scripts/lib/hls-converter.mjs)
+    const qualityMetadata: Record<string, { bandwidth: number; resolution: string }> = {
+      "1080p.m3u8": { bandwidth: 5128000, resolution: "1920x1080" },
+      "720p.m3u8": { bandwidth: 2928000, resolution: "1280x720" },
+      "480p.m3u8": { bandwidth: 1496000, resolution: "854x480" },
+      "360p.m3u8": { bandwidth: 896000, resolution: "640x360" },
+    };
 
-    if (!playlistObj) {
-      return new Response(JSON.stringify({ error: "HLS playlist not found" }), {
-        status: 404,
-        headers: {
-          "Content-Type": "application/json",
-          ...corsHeaders,
-        },
-      });
+    // Helper function to estimate metadata for non-standard resolutions
+    function estimateMetadata(qualityName: string): { bandwidth: number; resolution: string } {
+      // Extract height from quality name (e.g., "540p.m3u8" -> 540)
+      const heightMatch = qualityName.match(/(\d+)p\.m3u8$/);
+      if (!heightMatch) {
+        // Fallback
+        return { bandwidth: 1000000, resolution: "640x360" };
+      }
+
+      const height = parseInt(heightMatch[1]);
+      // Assume 16:9 aspect ratio, ensure even width
+      const width = Math.round(height * 16 / 9);
+      const evenWidth = width % 2 === 0 ? width : width - 1;
+
+      // Estimate bandwidth based on resolution tier
+      let bandwidth;
+      if (height >= 1080) {
+        bandwidth = 5128000;
+      } else if (height >= 720) {
+        bandwidth = 2928000;
+      } else if (height >= 480) {
+        bandwidth = 1496000;
+      } else {
+        bandwidth = 896000;
+      }
+
+      return {
+        bandwidth,
+        resolution: `${evenWidth}x${height}`
+      };
     }
 
-    const playlistContent = await playlistObj.text();
+    // Build master playlist with only verified available variants
+    const masterLines = ["#EXTM3U", "#EXT-X-VERSION:3"];
 
-    // Rewrite variant playlist references using robust M3U8 parser
-    // Variant references like "360p.m3u8" become "/api/hls/video.mp4/360p.m3u8"
-    const rewrittenPlaylist = await rewriteMasterPlaylist(playlistContent, {
-      rewriteUri: (uri) => `/api/hls/${videoKey}/${uri}`
-    });
+    for (const variantFile of variantFiles.sort().reverse()) {
+      const metadata = qualityMetadata[variantFile] || estimateMetadata(variantFile);
+      masterLines.push(
+        `#EXT-X-STREAM-INF:BANDWIDTH=${metadata.bandwidth},RESOLUTION=${metadata.resolution}`,
+        `/api/hls/${videoKey}/${variantFile}`
+      );
+    }
 
-    // Cache the rewritten manifest (90% of 4-hour TTL)
+    const masterPlaylist = masterLines.join("\n");
+
+    // Cache the generated manifest (90% of 4-hour TTL)
     const cacheTtl = Math.floor(14400 * 0.9);
-    await env.VIDEO_CACHE.put(manifestCacheKey, rewrittenPlaylist, {
+    await env.VIDEO_CACHE.put(manifestCacheKey, masterPlaylist, {
       expirationTtl: cacheTtl
     });
 
-    return new Response(rewrittenPlaylist, {
+    return new Response(masterPlaylist, {
       headers: {
         "Content-Type": "application/vnd.apple.mpegurl",
         "Cache-Control": "private, max-age=3600",

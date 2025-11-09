@@ -83,10 +83,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
     const hlsUrl = `${VIDEO_API_BASE}/api/hls/playlist?key=${currentItem.key}`
 
     try {
-      // Check if HLS is available
-      const hlsCheck = await fetch(hlsUrl, { method: 'HEAD', credentials: 'include' })
-
-      if (hlsCheck.ok && Hls.isSupported()) {
+      if (Hls.isSupported()) {
         // Use HLS.js
         const hls = new Hls({
           enableWorker: true,

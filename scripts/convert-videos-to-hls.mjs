@@ -102,6 +102,17 @@ async function main() {
         console.log(`  Uploading HLS files to R2...`);
         await uploadHLSToR2(key, outputDir);
 
+        // Update database with available quality levels using SQLite's json() function
+        const qualitiesJson = JSON.stringify(qualityLevels);
+        // Escape single quotes in the key for SQL
+        const escapedKey = key.replace(/'/g, "''");
+        // Escape double quotes in JSON for SQL
+        const escapedJson = qualitiesJson.replace(/"/g, '""');
+        execSync(`npx wrangler d1 execute wedding-photos-metadata --command "UPDATE media SET hls_qualities = json('${escapedJson}') WHERE key = '${escapedKey}'" --remote`, {
+          cwd: 'workers/viewer',
+          stdio: 'inherit'
+        });
+
         toConvert++;
         console.log(`  ✓ Converted to HLS (${qualityLevels.join(', ')})`);
       } catch (error) {

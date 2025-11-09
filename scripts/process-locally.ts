@@ -117,6 +117,22 @@ export default {
       });
     }
 
+    if (url.pathname === '/head-object') {
+      // Check if object exists using HEAD
+      const key = url.searchParams.get('key');
+      if (!key) {
+        return new Response('Missing key parameter', { status: 400 });
+      }
+
+      const head = await env.PHOTOS_BUCKET.head(key);
+
+      if (!head) {
+        return new Response('Not found', { status: 404 });
+      }
+
+      return new Response('OK');
+    }
+
     return new Response('Not found', { status: 404 });
   }
 };

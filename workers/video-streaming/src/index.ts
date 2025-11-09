@@ -67,7 +67,10 @@ export default {
       return handleGetHLS(url, env, corsHeaders);
     }
 
-    return new Response("Not Found - Video Streaming Worker", { status: 404 });
+    return new Response("Not Found - Video Streaming Worker", {
+      status: 404,
+      headers: corsHeaders
+    });
   },
 };
 
@@ -81,7 +84,10 @@ async function handleGetHLS(url: URL, env: VideoStreamingEnv, corsHeaders: Recor
   const pathParts = url.pathname.replace("/api/hls/", "").split("/");
 
   if (pathParts.length < 2) {
-    return new Response("Invalid HLS path", { status: 400 });
+    return new Response("Invalid HLS path", {
+      status: 400,
+      headers: corsHeaders
+    });
   }
 
   const rawVideoKey = decodeURIComponent(pathParts.slice(0, -1).join("/"));
@@ -96,7 +102,10 @@ async function handleGetHLS(url: URL, env: VideoStreamingEnv, corsHeaders: Recor
     const object = await env.R2_BUCKET.get(hlsKey);
 
     if (!object) {
-      return new Response("HLS file not found", { status: 404 });
+      return new Response("HLS file not found", {
+        status: 404,
+        headers: corsHeaders
+      });
     }
 
     const headers = new Headers();

@@ -46,6 +46,7 @@ async function main() {
         codec TEXT,
         width INTEGER,
         height INTEGER,
+        hls_qualities TEXT,
         thumbnail_small TEXT,
         thumbnail_medium TEXT,
         thumbnail_large TEXT,

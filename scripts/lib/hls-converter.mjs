@@ -89,25 +89,65 @@ export async function getVideoMetadata(videoBuffer) {
 function selectQualityPresets(sourceWidth, sourceHeight) {
   const sourceResolution = sourceHeight;
 
-  // Only generate qualities equal to or lower than source
+  // Only generate qualities lower than source
   const selected = HLS_PRESETS.filter(preset => {
     const targetHeight = parseInt(preset.resolution.split('x')[1]);
-    return targetHeight <= sourceResolution;
+    return targetHeight < sourceResolution;
   });
 
-  // If no presets match (video is very low res), create a preset for the source resolution
-  if (selected.length === 0) {
-    return [{
+  // Check if source resolution exactly matches a standard preset
+  const exactMatch = HLS_PRESETS.find(preset => {
+    const targetHeight = parseInt(preset.resolution.split('x')[1]);
+    return targetHeight === sourceResolution;
+  });
+
+  // Always include native resolution as the highest quality
+  if (exactMatch) {
+    // Source matches a standard preset, add it
+    selected.push(exactMatch);
+  } else {
+    // Source is non-standard resolution, create custom preset for native quality
+    // Calculate appropriate bitrate based on resolution
+    let videoBitrate, audioBitrate, maxrate, bufsize;
+
+    if (sourceResolution >= 1080) {
+      videoBitrate = '5000k';
+      audioBitrate = '128k';
+      maxrate = '5350k';
+      bufsize = '7500k';
+    } else if (sourceResolution >= 720) {
+      videoBitrate = '2800k';
+      audioBitrate = '128k';
+      maxrate = '2996k';
+      bufsize = '4200k';
+    } else if (sourceResolution >= 480) {
+      videoBitrate = '1400k';
+      audioBitrate = '96k';
+      maxrate = '1498k';
+      bufsize = '2100k';
+    } else {
+      videoBitrate = '800k';
+      audioBitrate = '96k';
+      maxrate = '856k';
+      bufsize = '1200k';
+    }
+
+    selected.push({
       name: `${sourceHeight}p`,
       resolution: `${sourceWidth}x${sourceHeight}`,
-      videoBitrate: '800k',
-      audioBitrate: '96k',
-      maxrate: '856k',
-      bufsize: '1200k'
-    }];
+      videoBitrate,
+      audioBitrate,
+      maxrate,
+      bufsize
+    });
   }
 
-  return selected;
+  // Sort by resolution (highest first) for consistent ordering
+  return selected.sort((a, b) => {
+    const aHeight = parseInt(a.resolution.split('x')[1]);
+    const bHeight = parseInt(b.resolution.split('x')[1]);
+    return bHeight - aHeight;
+  });
 }
 
 /**
