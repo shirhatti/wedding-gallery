@@ -1,5 +1,18 @@
 # HLS Architecture & TTFB Optimization
 
+> **STATUS (2024-11-10)**: ALL OPTIMIZATIONS IMPLEMENTED
+>
+> This was a design proposal document. All 5 optimizations have been successfully implemented:
+> - ✅ Progressive manifest delivery (`generateProgressiveManifest()`)
+> - ✅ Lazy segment signing (`/api/hls-segment/`)
+> - ✅ Master playlist optimization (no signing)
+> - ✅ Manifest-level caching (KV cache)
+> - ✅ Parallel manifest generation (batch signing)
+>
+> For current operational details, see [HLS Implementation](../architecture/hls-implementation.md).
+>
+> This document is kept as historical reference showing the design rationale.
+
 ## How HLS Works
 
 ### Hierarchical Structure
