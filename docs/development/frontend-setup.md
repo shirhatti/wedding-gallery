@@ -1,10 +1,10 @@
 # Wedding Gallery - Cloudflare Pages Frontend
 
-Modern React frontend for the wedding gallery, built with Vite, React, TypeScript, and shadcn/ui.
+Modern React frontend for the wedding gallery, built with Vite, React, TypeScript, and Tailwind CSS.
 
 ## Features
 
-- 🎨 Built with shadcn/ui components and Tailwind CSS
+- 🎨 Built with custom components using shadcn/ui styling patterns and Tailwind CSS
 - ⚡ Fast development with Vite
 - 📱 Responsive design (mobile and desktop)
 - 🖼️ Lightbox with keyboard navigation
@@ -32,25 +32,35 @@ npm run dev
 
 The app will be available at `http://localhost:5173`
 
-**Note:** For local development, set the API base URLs:
+**Note:** The Vite config includes proxy settings that automatically route API requests to `localhost:8787` (viewer) and `localhost:8788` (video-streaming) during local development. Environment variables are only required for production deployments or if you need to override the default proxy behavior.
+
+Optionally create `pages/gallery/.env.local`:
 ```bash
-VITE_API_BASE=http://localhost:8787 VITE_VIDEO_API_BASE=http://localhost:8788 npm run dev
+VITE_API_BASE=http://localhost:8787
+VITE_VIDEO_API_BASE=http://localhost:8788
 ```
 
-This points the app to:
-- `VITE_API_BASE`: Viewer worker at `http://localhost:8787`
-- `VITE_VIDEO_API_BASE`: Video streaming worker at `http://localhost:8788`
+### Developing with Local Workers
 
-### Developing with Local Worker
-
-1. In a separate terminal, start the Worker:
+**Recommended:** Use the monorepo dev commands from the project root:
 ```bash
-cd ../../workers/viewer
+# From project root - starts viewer + video-streaming + pages
 npm run dev
 ```
 
-2. The Worker will run on `http://localhost:8787`
-3. The Pages app is configured to proxy to this endpoint in development
+**Alternative:** Run services individually in separate terminals:
+```bash
+# Terminal 1: Viewer worker
+npm run dev:viewer    # http://localhost:8787
+
+# Terminal 2: Video streaming worker
+npm run dev:video     # http://localhost:8788
+
+# Terminal 3: Frontend
+npm run dev:pages     # http://localhost:5173
+```
+
+The Pages app proxy configuration automatically routes requests to the local workers.
 
 ## Building
 
@@ -65,7 +75,7 @@ The output will be in the `dist` directory.
 ### Using Wrangler
 
 ```bash
-npm run pages:deploy
+npm run deploy:pages
 ```
 
 ### Environment Variables
@@ -99,7 +109,6 @@ When the Worker is configured with R2 credentials, media is fetched directly fro
 - **React 18** - UI library
 - **TypeScript** - Type safety
 - **Vite** - Build tool
-- **Tailwind CSS** - Utility-first CSS
-- **shadcn/ui** - High-quality React components
+- **Tailwind CSS** - Utility-first CSS with shadcn/ui patterns
 - **HLS.js** - Video streaming
 - **Lucide React** - Icons
