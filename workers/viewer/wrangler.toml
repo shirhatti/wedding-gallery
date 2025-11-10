@@ -3,22 +3,25 @@ main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
 # R2 bucket binding
+# SETUP: Replace bucket_name with your R2 bucket name
 [[r2_buckets]]
 binding = "R2_BUCKET"
-bucket_name = "wedding-photos"
-preview_bucket_name = "wedding-photos"
+bucket_name = "YOUR_R2_BUCKET_NAME"
+preview_bucket_name = "YOUR_R2_BUCKET_NAME"
 
 # D1 database for photo metadata
+# SETUP: Replace database_id with your D1 database ID (get with: wrangler d1 list)
 [[d1_databases]]
 binding = "DB"
-database_name = "wedding-photos-metadata"
-database_id = "150012ba-e8d4-4e02-8769-aafd24fe08d0"
+database_name = "YOUR_DATABASE_NAME"
+database_id = "YOUR_D1_DATABASE_ID"
 
 # KV namespace for cache versioning
+# SETUP: Replace id and preview_id with your KV namespace IDs (get with: wrangler kv namespace list)
 [[kv_namespaces]]
 binding = "CACHE_VERSION"
-id = "cf132b95f9434658b98935f880a0b299"
-preview_id = "0e495b6647154a1a8532b0d3fafb7c82"
+id = "YOUR_KV_NAMESPACE_ID"
+preview_id = "YOUR_KV_PREVIEW_NAMESPACE_ID"
 
 # Development settings
 [dev]

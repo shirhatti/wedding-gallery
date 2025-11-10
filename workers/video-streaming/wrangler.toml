@@ -3,23 +3,26 @@ main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
 # R2 bucket binding for video files
+# SETUP: Replace bucket_name with your R2 bucket name (same as viewer worker)
 [[r2_buckets]]
 binding = "R2_BUCKET"
-bucket_name = "wedding-photos"
-preview_bucket_name = "wedding-photos"
+bucket_name = "YOUR_R2_BUCKET_NAME"
+preview_bucket_name = "YOUR_R2_BUCKET_NAME"
 
 # D1 database for media metadata
+# SETUP: Replace database_id with your D1 database ID (same as viewer worker)
 [[d1_databases]]
 binding = "DB"
-database_name = "wedding-photos-metadata"
-database_id = "150012ba-e8d4-4e02-8769-aafd24fe08d0"
+database_name = "YOUR_DATABASE_NAME"
+database_id = "YOUR_D1_DATABASE_ID"
 
 # KV namespace for video-specific caching
 # Stores: manifests, signed URLs, signing keys
+# SETUP: Replace id and preview_id with your KV namespace IDs (can reuse same KV as viewer worker)
 [[kv_namespaces]]
 binding = "VIDEO_CACHE"
-id = "cf132b95f9434658b98935f880a0b299"  # Reuse existing CACHE_VERSION KV for now
-preview_id = "0e495b6647154a1a8532b0d3fafb7c82"
+id = "YOUR_KV_NAMESPACE_ID"
+preview_id = "YOUR_KV_PREVIEW_NAMESPACE_ID"
 
 # Development settings
 [dev]

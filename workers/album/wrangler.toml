@@ -3,16 +3,18 @@ main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
 # R2 bucket binding (same bucket as gallery)
+# SETUP: Replace bucket_name with your R2 bucket name (same as other workers)
 [[r2_buckets]]
 binding = "PHOTOS_BUCKET"
-bucket_name = "wedding-photos"
-preview_bucket_name = "wedding-photos"
+bucket_name = "YOUR_R2_BUCKET_NAME"
+preview_bucket_name = "YOUR_R2_BUCKET_NAME"
 
 # D1 database binding
+# SETUP: Replace database_id with your D1 database ID (same as other workers)
 [[d1_databases]]
 binding = "DB"
-database_name = "wedding-photos-metadata"
-database_id = "150012ba-e8d4-4e02-8769-aafd24fe08d0"
+database_name = "YOUR_DATABASE_NAME"
+database_id = "YOUR_D1_DATABASE_ID"
 
 # Development settings
 [dev]

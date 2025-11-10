@@ -9,6 +9,7 @@ interface Env {
   GALLERY_PASSWORD?: string; // Simple password for gallery access
   AUTH_SECRET?: string; // Secret used to sign auth cookie
   DISABLE_AUTH?: string; // Disable auth entirely (for local dev - set to "true")
+  ALLOWED_DOMAIN?: string; // The allowed domain for cross-subdomain authentication (e.g., "example.pages.dev")
   // R2 signing credentials (optional)
   R2_ACCESS_KEY_ID?: string;
   R2_SECRET_ACCESS_KEY?: string;
@@ -61,7 +62,8 @@ export default {
           {
             secret: env.AUTH_SECRET!,
             cacheVersion: env.CACHE_VERSION,
-            disableAuth: env.DISABLE_AUTH === "true"
+            disableAuth: env.DISABLE_AUTH === "true",
+            allowedDomain: env.ALLOWED_DOMAIN
           },
           audience,
           authValue
