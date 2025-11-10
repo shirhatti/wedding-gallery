@@ -18,10 +18,10 @@ model Media {
   filename   String
   type       String  // 'image' or 'video'
   size       Int?
-  uploadedAt String? @map("uploaded_at") // ISO timestamp string
+  uploadedAt DateTime? @map("uploaded_at")
 
   // EXIF metadata
-  dateTaken    String? @map("date_taken") // ISO timestamp string
+  dateTaken    DateTime? @map("date_taken")
   cameraMake   String? @map("camera_make")
   cameraModel  String? @map("camera_model")
   lens         String?
@@ -54,19 +54,18 @@ model Media {
   // Full EXIF metadata (JSON blob)
   metadata String?
 
-  // Timestamps (Note: Application code explicitly sets these using toISOString())
-  // The @default values match the SQLite schema but should always be overridden
-  processedAt String? @map("processed_at")
-  createdAt   String  @map("created_at")
-  updatedAt   String  @map("updated_at")
+  // Timestamps (Note: Application code explicitly sets these)
+  processedAt DateTime? @map("processed_at")
+  createdAt   DateTime  @map("created_at")
+  updatedAt   DateTime  @map("updated_at")
 
   @@map("media")
 }
 
 model PendingThumbnails {
   key       String @id
-  // Note: Application code explicitly sets createdAt using toISOString()
-  createdAt String @map("created_at")
+  // Note: Application code explicitly sets createdAt
+  createdAt DateTime @map("created_at")
 
   @@map("pending_thumbnails")
 }
