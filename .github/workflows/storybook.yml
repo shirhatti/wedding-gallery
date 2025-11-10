@@ -1,4 +1,4 @@
-name: Deploy Storybook to GitHub Pages
+name: Deploy Docs and Storybook to GitHub Pages
 
 on:
   push:
@@ -19,11 +19,16 @@ concurrency:
 
 jobs:
   deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -31,9 +36,17 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build and Deploy Storybook
-        uses: bitovi/github-actions-storybook-to-github-pages@v1.0.3
+      - name: Build Storybook
+        run: npm run build-storybook -w pages/gallery
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          path: pages/gallery/storybook-static
-          build_command: npm run build-storybook -w pages/gallery
-          checkout: false
+          path: './docs'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -22,15 +22,16 @@ This creates a static build in the `storybook-static/` directory.
 
 ## Deployment
 
-Storybook is automatically deployed to GitHub Pages via GitHub Actions. The deployment is triggered on pushes to `main` or `release` branches.
+Storybook is automatically deployed to GitHub Pages alongside the project documentation via GitHub Actions. The deployment is triggered on pushes to `main` or `release` branches.
 
 The GitHub Action (`.github/workflows/storybook.yml`):
 1. Installs dependencies
-2. Builds Storybook
-3. Deploys to GitHub Pages using the Bitovi action
+2. Builds Storybook to `docs/storybook/`
+3. Deploys the entire `docs/` directory to GitHub Pages
 
-When deployed, Storybook is accessible at:
-- **GitHub Pages**: `https://shirhatti.github.io/wedding-gallery/`
+When deployed, content is accessible at:
+- **Documentation**: `https://shirhatti.github.io/wedding-gallery/`
+- **Storybook**: `https://shirhatti.github.io/wedding-gallery/storybook/`
 
 ## Configuration
 
