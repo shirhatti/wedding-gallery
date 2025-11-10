@@ -5,8 +5,10 @@ This document describes how to bypass branch protection rules in emergency situa
 ## Why Branch Protection Exists
 
 - **main**: Requires tests to pass, linear history (fast-forward only)
-- **release**: Requires PRs from main, tests to pass, linear history
+- **release**: Requires tests to pass, linear history (fast-forward only)
 - **Both**: Enforced on admins to prevent accidental direct pushes
+
+**Note:** Neither branch requires PR reviews (single developer workflow), but both require status checks to pass.
 
 ## When to Break Glass
 

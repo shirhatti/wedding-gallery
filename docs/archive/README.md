@@ -6,18 +6,8 @@ This directory contains historical planning documents and technical analyses tha
 
 ### Optimization & Performance Analysis
 
-- **[SIGNING_OPTIMIZATION.md](SIGNING_OPTIMIZATION.md)** - R2 presigned URL optimization strategies
-- **[HLS_OPTIMIZATION.md](HLS_OPTIMIZATION.md)** - HLS architecture and TTFB optimization
-- **[OPTIMIZATION_OPTIONS.md](OPTIMIZATION_OPTIONS.md)** - Video signing performance optimization options
-
-### Code Quality & Architecture Planning
-
-- **[CODE_DUPLICATION_ANALYSIS.md](CODE_DUPLICATION_ANALYSIS.md)** - Analysis of duplicate libraries between workers
-- **[WORKER_SEPARATION_PLAN.md](WORKER_SEPARATION_PLAN.md)** - Plan for separating video streaming from media serving
-
-### Historical PR Documentation
-
-- **[PR_DESCRIPTION.md](PR_DESCRIPTION.md)** - Pull request description for presigned URLs feature
+- **[HLS_OPTIMIZATION.md](HLS_OPTIMIZATION.md)** - HLS architecture and TTFB optimization (✅ All optimizations implemented)
+- **[OPTIMIZATION_OPTIONS.md](OPTIMIZATION_OPTIONS.md)** - Video signing performance optimization options (Partially implemented)
 
 ## Note on Relevancy
 

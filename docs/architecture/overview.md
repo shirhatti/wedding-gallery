@@ -28,14 +28,15 @@ See [Frontend Setup](../development/frontend-setup.md) for development details.
 Three specialized workers handle different aspects of the backend:
 
 #### 1. Viewer Worker
-**Purpose:** Media delivery, authentication, and API endpoints
+**Purpose:** Media delivery and API endpoints
 
 **Endpoints:**
 - `GET /api/media` - List media with metadata
 - `GET /api/file/:key` - Serve original images (fallback)
 - `GET /api/thumbnail/:key` - Serve thumbnails (fallback)
-- `POST /login` - Authentication
 - `GET /api/cache-version` - Cache version management
+
+**Note:** Authentication (`POST /login`) is handled by Cloudflare Pages Functions, not the worker.
 
 **Characteristics:**
 - I/O-intensive workload
@@ -168,7 +169,9 @@ User → Pages SPA → Video Streaming Worker → R2 (HLS files)
 - Optional password protection via `GALLERY_PASSWORD` environment variable
 - HMAC-based auth tokens stored in HttpOnly cookies
 - Token versioning for instant invalidation
+- Tokens automatically expire after 30 days
 - Subdomain-compatible tokens
+- Login handled by Cloudflare Pages Functions
 
 See [Token Revocation](../operations/token-revocation.md) for token management.
 
@@ -194,7 +197,7 @@ Emergency procedures for bypassing branch protection are documented in [Break Gl
 
 ### Video Streaming
 
-- **Adaptive Bitrate:** HLS provides multiple quality levels (360p, 720p, 1080p)
+- **Adaptive Bitrate:** HLS provides multiple quality levels (360p, 480p, 720p, 1080p)
 - **Manifest Caching:** 4-hour KV cache for HLS manifests
 - **Batch Signing:** Optimized crypto operations for URL signing
 - **Progressive Delivery:** First segments signed immediately for faster playback
@@ -213,7 +216,8 @@ See [HLS Implementation](hls-implementation.md) for video streaming details.
 
 GitHub Actions workflows handle:
 - Automated testing on pull requests
-- Deployment to production on merge to main
+- Deployment to preview on merge to `main` branch
+- Deployment to production on merge to `release` branch
 - Hourly thumbnail generation
 - Daily video conversion (if needed)
 

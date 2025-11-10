@@ -1,5 +1,12 @@
 # Video Signing Performance Optimization Options
 
+> **STATUS (2024-11-10)**: PARTIALLY IMPLEMENTED
+> - **Option 1** (Signing key cache): Code exists but NOT actively used
+> - **Option 2** (Manifest caching): ✅ IMPLEMENTED (commit d0a2db8)
+> - **Options 3-6**: Not implemented
+>
+> This document is kept as historical reference for optimization decisions made.
+
 ## Current Implementation: Batch Signing with URL Cache
 - **Cache hit**: ~10-30ms (parallel KV reads)
 - **Cache miss**: ~150-300ms for 600 segments (1,204 HMAC operations)

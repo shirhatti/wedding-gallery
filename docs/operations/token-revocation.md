@@ -34,6 +34,7 @@ npx wrangler kv key put auth_version "2" --binding=CACHE_VERSION
 - The `auth_version` default is "1" if not set
 - Incrementing the version (e.g., "1" → "2") immediately invalidates all existing tokens
 - The version can be any string; conventionally use incrementing numbers
+- **Automatic expiration**: All tokens automatically expire after 30 days regardless of secret rotation
 
 ## Check current auth_version
 ```bash
@@ -41,6 +42,9 @@ npx wrangler kv key get auth_version --binding=CACHE_VERSION
 ```
 
 ## Implementation reference
-- `packages/auth/src/index.ts` contains the token creation and validation logic
+- `packages/auth/src/index.ts` contains the token validation logic
   - Tokens are HMAC-signed with `AUTH_SECRET` (changing it invalidates all tokens)
   - Tokens embed `auth_version` from KV (bumping it also invalidates tokens)
+  - Tokens automatically expire after 30 days from issuance
+- `pages/gallery/functions/api/login.ts` creates tokens on successful login
+- `workers/viewer/src/index.ts` validates tokens for API requests

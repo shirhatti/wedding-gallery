@@ -8,7 +8,11 @@ This project uses npm workspaces to manage multiple packages in a monorepo struc
 wedding-gallery/
 ├── workers/
 │   ├── viewer/          (@wedding-gallery/viewer)
+│   ├── video-streaming/ (@wedding-gallery/video-streaming)
 │   └── album/           (@wedding-gallery/album)
+├── packages/
+│   ├── auth/            (@wedding-gallery/auth)
+│   └── shared-video-lib/ (@wedding-gallery/shared-video-lib)
 ├── pages/
 │   └── gallery/         (@wedding-gallery/pages)
 ├── tsconfig.base.json   (shared TypeScript config)
@@ -20,16 +24,17 @@ wedding-gallery/
 ### Start Development Servers
 
 ```bash
-# Start viewer (API backend) + pages (frontend) - most common
+# Start viewer + video-streaming + pages - most common
 # Uses remote bindings (production D1, R2, KV) with pre-signed URLs enabled
 npm run dev
 
-# Start all services (viewer, album, pages)
+# Start all services (viewer, video-streaming, album, pages)
 npm run dev:all
 
 # Start individual services
-npm run dev:viewer    # API backend on http://localhost:8787 (remote bindings)
-npm run dev:album     # Album processor worker
+npm run dev:viewer    # Viewer worker on http://localhost:8787 (remote bindings)
+npm run dev:video     # Video streaming worker on http://localhost:8788 (remote bindings)
+npm run dev:album     # Album processor worker on http://localhost:8789 (remote bindings)
 npm run dev:pages     # Frontend on http://localhost:5173
 ```
 
@@ -87,14 +92,20 @@ npm run build -w pages/gallery
 
 All packages extend from `tsconfig.base.json` which contains shared compiler options:
 - `workers/viewer/tsconfig.json` - extends base + Cloudflare Workers types
+- `workers/video-streaming/tsconfig.json` - extends base + Cloudflare Workers types
 - `workers/album/tsconfig.json` - extends base + Cloudflare Workers types
+- `packages/auth/tsconfig.json` - extends base + shared auth library
+- `packages/shared-video-lib/tsconfig.json` - extends base + shared video utilities
 - `pages/gallery/tsconfig.json` - extends base + React-specific config
 
 ## Package Naming Convention
 
 Packages use scoped naming:
 - `@wedding-gallery/viewer` - API backend worker
+- `@wedding-gallery/video-streaming` - Video streaming worker
 - `@wedding-gallery/album` - Album processor worker
+- `@wedding-gallery/auth` - Shared authentication library
+- `@wedding-gallery/shared-video-lib` - Shared video utilities
 - `@wedding-gallery/pages` - React frontend
 
 ## Environment Variables
@@ -119,12 +130,21 @@ GALLERY_PASSWORD=your_password
 AUTH_SECRET=your_secret_key
 ```
 
+### Video Streaming Worker
+
+**Default dev script sets:**
+- `DISABLE_AUTH=true` (for local development)
+
+**Optional (workers/video-streaming/.dev.vars):**
+Same R2 configuration as viewer worker if running in local mode.
+
 ### Pages App (pages/gallery/.env.local)
 ```bash
 VITE_API_BASE=http://localhost:8787
+VITE_VIDEO_API_BASE=http://localhost:8788
 ```
 
-**Note:** With `--remote`, the viewer connects to production R2 credentials, so R2 signing works automatically without local .dev.vars configuration.
+**Note:** With `--remote`, workers connect to production R2 credentials, so R2 signing works automatically without local .dev.vars configuration.
 
 ## Tips
 
