@@ -22,32 +22,44 @@ A modern React application with:
 
 **Tech Stack:**
 - React 18.3
-- TypeScript 5.6
+- TypeScript 5.9.3
 - Tailwind CSS 3.4
-- shadcn/ui components
+- shadcn/ui styling patterns
 - HLS.js for video playback
 - Lucide React for icons
 
 ### 2. Worker API Updates (`workers/viewer/`)
 
 Enhanced the Worker to be API-only:
-- ✅ **R2 SigV4 signing** utility (`lib/r2-signer.ts`)
+- ✅ **R2 SigV4 signing** utility (`packages/shared-video-lib/src/r2-signer.ts`)
 - ✅ **Pre-signed URL generation** in `/api/media` endpoint
-- ✅ **HLS playlist rewrite** endpoint (`/api/hls/playlist`)
 - ✅ **CORS configuration** updated for Pages origin
 - ✅ **Backward compatible** - works with or without signing credentials
 
-**New Environment Variables:**
+### 3. Video Streaming Worker (`workers/video-streaming/`)
+
+Dedicated worker for HLS video streaming:
+- ✅ **HLS playlist rewrite** endpoint (`/api/hls/playlist`)
+- ✅ **Lazy segment loading** with on-demand signed URLs
+- ✅ **Progressive manifest delivery** for faster initial load
+
+**Environment Variables (both workers):**
 ```bash
 R2_ACCESS_KEY_ID         # R2 API access key
 R2_SECRET_ACCESS_KEY     # R2 API secret key
 R2_REGION               # Usually "auto" for Cloudflare
 R2_BUCKET_NAME          # R2 bucket name
 R2_ACCOUNT_ID           # Cloudflare account ID
-PAGES_ORIGIN            # Pages domain for CORS
+ENABLE_PRESIGNED_URLS    # Set to "true" to enable direct R2 access
 ```
 
-### 3. Direct R2 Access
+### 4. Cloudflare Pages Functions
+
+Authentication is handled via Pages Functions:
+- ✅ **Login endpoint** (`pages/gallery/functions/api/login.ts`)
+- ✅ **Cookie-based authentication** with HttpOnly cookies
+
+### 5. Direct R2 Access
 
 When signing credentials are configured:
 - Thumbnails fetched directly from R2 with 30-minute TTL
@@ -58,28 +70,30 @@ When signing credentials are configured:
 ## Architecture Diagram
 
 ```
-┌─────────────────┐
-│ Cloudflare Pages│
-│   (React UI)    │
-└────────┬────────┘
-         │
-         ├─────GET /api/media ────────┐
-         │                            │
-         ├─────GET /api/hls/playlist──┤
-         │                            │
-         ├─────POST /login ───────────┤
-         │                            │
-┌────────▼────────┐                   │
-│     Worker      │                   │
-│  (API + Auth)   │                   │
-└────────┬────────┘                   │
-         │                            │
-         │ Signs URLs                 │
-         ▼                            │
-   ┌──────────┐                       │
-   │    R2    │◄──────────────────────┘
-   │ (Storage)│   Direct fetch with
-   └──────────┘   pre-signed URLs
+┌─────────────────────────────┐
+│   Cloudflare Pages          │
+│   (React UI + Functions)    │
+│                             │
+│   POST /login (Function)    │
+└──────────┬──────────────────┘
+           │
+           ├─────GET /api/media──────────────┐
+           │                                 │
+           ├─────GET /api/hls/playlist───────┤
+           │                                 │
+┌──────────▼─────────┐     ┌────────────────▼┐
+│  Viewer Worker     │     │ Video Streaming │
+│  (API + Signing)   │     │     Worker      │
+└──────────┬─────────┘     └────────┬────────┘
+           │                        │
+           │ Signs URLs             │ Signs URLs
+           ▼                        ▼
+      ┌─────────────────────────────────┐
+      │              R2                 │
+      │          (Storage)              │◄──────┐
+      └─────────────────────────────────┘       │
+                                        Direct fetch with
+                                        pre-signed URLs
 ```
 
 ## Installation & Setup
@@ -114,8 +128,8 @@ wrangler secret put R2_ACCOUNT_ID
 wrangler secret put R2_BUCKET_NAME  # e.g., "wedding-photos"
 wrangler secret put R2_REGION       # Usually "auto"
 
-# Set Pages origin for CORS
-wrangler secret put PAGES_ORIGIN    # e.g., "https://gallery.pages.dev"
+# Enable presigned URLs
+wrangler secret put ENABLE_PRESIGNED_URLS  # Set to "true"
 ```
 
 ### 4. Configure R2 CORS
@@ -196,8 +210,10 @@ npm run deploy:all
 
 1. Update DNS/routing to point to Pages
 2. Remove old template-based routes from Worker
-3. Remove `/api/file`, `/api/thumbnail`, `/api/hls/<path>` endpoints
-4. Keep only API routes: `/api/media`, `/api/hls/playlist`, `/login`
+3. Remove `/api/file`, `/api/thumbnail` proxy endpoints (media served via presigned URLs)
+4. Keep viewer worker API routes: `/api/media`
+5. Keep video-streaming worker routes: `/api/hls/playlist`, `/api/hls-segment`
+6. Authentication handled by Pages Function: `/api/login`
 
 ### Phase 3: Optimization
 
@@ -262,9 +278,9 @@ npm run deploy:all
 - Check browser console for CORS errors
 
 ### "CORS policy" errors
-- Verify `PAGES_ORIGIN` is set in Worker
 - Check R2 CORS policy includes Pages domain
 - Ensure credentials: 'include' in fetch requests
+- Verify worker CORS headers are configured correctly
 
 ### Images not loading
 - Verify R2 signing credentials are configured
@@ -300,9 +316,10 @@ If issues arise:
 
 ✅ **Implemented:**
 - Pre-signed URLs with short TTLs (30 min)
-- HttpOnly cookies for authentication
-- CORS restricted to Pages origin
+- HttpOnly cookies for authentication (Pages Functions)
+- CORS configured on R2 bucket
 - No public R2 access without signed URLs
+- Tokens expire after 30 days
 
 ⚠️ **Additional Recommendations:**
 - Rotate R2 API keys regularly
