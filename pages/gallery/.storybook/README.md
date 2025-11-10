@@ -22,15 +22,15 @@ This creates a static build in the `storybook-static/` directory.
 
 ## Deployment
 
-Storybook is automatically deployed alongside the main gallery app to Cloudflare Pages. The build process:
+Storybook is automatically deployed to GitHub Pages via GitHub Actions. The deployment is triggered on pushes to `main` or `release` branches.
 
-1. Builds the main gallery app (`tsc && vite build`)
-2. Builds Storybook (`storybook build`)
-3. Copies Storybook to `dist/storybook/`
+The GitHub Action (`.github/workflows/storybook.yml`):
+1. Installs dependencies
+2. Builds Storybook
+3. Deploys to GitHub Pages using the Bitovi action
 
 When deployed, Storybook is accessible at:
-- **Production**: `https://yoursite.com/storybook`
-- **Preview**: `https://preview.yoursite.com/storybook`
+- **GitHub Pages**: `https://shirhatti.github.io/wedding-gallery/`
 
 ## Configuration
 
