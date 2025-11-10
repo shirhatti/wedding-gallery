@@ -7,7 +7,7 @@ Added complete HLS (HTTP Live Streaming) adaptive bitrate video support to the w
 
 ### 1. Video Thumbnail Generation
 - **Created**: `scripts/lib/thumbnail-generator.mjs` - Shared DRY utility for thumbnail generation
-- Extracts video frames using ffmpeg at 1 second mark **with aspect ratio preservation** (`1920x?`)
+- Extracts video frames using ffmpeg at 1 second mark with aspect ratio preservation using `scale=1920:-2:force_original_aspect_ratio=decrease`
 - Generates 3 thumbnail sizes (small/150px, medium/400px, large/800px) in WebP format
 - Also handles image thumbnails with EXIF-aware rotation
 - Supports EXIF metadata extraction for images
@@ -55,11 +55,13 @@ Added complete HLS (HTTP Live Streaming) adaptive bitrate video support to the w
   - Helper script to delete and regenerate video thumbnails
   - Useful for fixing aspect ratio issues from old thumbnails
 
-### 5. Viewer Updates
-- **Modified**: `workers/viewer/src/index.ts`
-  - Added `/api/hls/{videoKey}/{filename}` endpoint
-  - Serves HLS manifests (.m3u8) and segments (.ts)
+### 5. Video Streaming Worker
+- **Created**: `workers/video-streaming/`
+  - Added `/api/hls/playlist?key={videoKey}` - Master playlist endpoint
+  - Added `/api/hls-segment/` - Lazy segment loading with on-demand signed URLs
+  - Serves HLS manifests (.m3u8) and segments (.ts) with presigned URLs
   - Proper content types and caching headers
+  - 4-hour KV cache for manifests
 
 - **Modified**: `workers/viewer/src/templates/gallery.ts`
   - Grid view now shows video thumbnails (not full videos) for better performance
@@ -82,12 +84,12 @@ Added complete HLS (HTTP Live Streaming) adaptive bitrate video support to the w
   - Now handles both images and videos
 
 ### 7. Dependencies Added
-- `fluent-ffmpeg` - Video processing
-- `@ffmpeg-installer/ffmpeg` - FFmpeg binary bundled with package
-- `@ffprobe-installer/ffprobe` - FFprobe binary for metadata extraction
 - `exifr` - EXIF metadata extraction for images
 - `heic-convert` - HEIC to JPEG conversion
+- `sharp` - Image processing and thumbnail generation
 - HLS.js (CDN) - Client-side HLS playback
+
+**Note:** FFmpeg and FFprobe must be installed on the system. CI workflows use `AnimMouse/setup-ffmpeg` to install them automatically.
 
 ## Current Video Statistics
 - **Total videos**: 4
@@ -98,27 +100,27 @@ Added complete HLS (HTTP Live Streaming) adaptive bitrate video support to the w
 
 ### Generate Thumbnails for Videos
 ```bash
-cd /Users/shirhatti/dev/wedding-gallery
+# From project root
 node scripts/generate-and-upload-thumbnails.mjs          # Dry run
 node scripts/generate-and-upload-thumbnails.mjs --generate  # Actually generate
 ```
 
 ### Convert Videos to HLS
 ```bash
-cd /Users/shirhatti/dev/wedding-gallery
+# From project root
 node scripts/convert-videos-to-hls.mjs          # Dry run
 node scripts/convert-videos-to-hls.mjs --convert   # Actually convert
 ```
 
 ### Process Pending Thumbnails (for web uploads)
 ```bash
-cd /Users/shirhatti/dev/wedding-gallery
+# From project root
 node scripts/generate-thumbnails-from-pending.mjs
 ```
 
 ### Regenerate Video Thumbnails (fix aspect ratio)
 ```bash
-cd /Users/shirhatti/dev/wedding-gallery
+# From project root
 node scripts/regenerate-video-thumbnails.mjs
 node scripts/generate-thumbnails-from-pending.mjs
 ```
