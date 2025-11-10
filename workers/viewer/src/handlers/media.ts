@@ -7,12 +7,42 @@ interface Env {
 
 export async function handleGetFile(url: URL, env: Env, request: Request): Promise<Response> {
   const key = decodeURIComponent(url.pathname.replace("/api/file/", ""));
-  
+
   try {
     // Check if this is a range request (for video streaming)
     const range = request.headers.get("range");
-    
+
     if (range) {
+      // Check If-Range header - if present, validate before serving range
+      const ifRange = request.headers.get("if-range");
+
+      if (ifRange) {
+        // Get object metadata to check ETag
+        const head = await env.R2_BUCKET.head(key);
+        if (!head) {
+          return new Response("File not found", { status: 404 });
+        }
+
+        // If-Range can be either an ETag or a date
+        // If it doesn't match, we should return the full file (200) instead of range
+        const currentEtag = head.httpEtag;
+        if (currentEtag !== ifRange && `"${currentEtag}"` !== ifRange) {
+          // ETag doesn't match, return full file
+          const object = await env.R2_BUCKET.get(key);
+          if (!object) {
+            return new Response("File not found", { status: 404 });
+          }
+
+          const headers = new Headers();
+          object.writeHttpMetadata(headers);
+          headers.set("etag", object.httpEtag);
+          headers.set("Cache-Control", "public, max-age=86400");
+          headers.set("Accept-Ranges", "bytes");
+
+          return new Response(object.body, { status: 200, headers });
+        }
+      }
+
       // Handle range request for video streaming efficiently using R2 range
       const match = range.match(/^bytes=(\d+)-(\d+)?$/);
       if (!match) {

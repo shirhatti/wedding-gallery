@@ -76,7 +76,8 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
       return item.urls.thumbnailMedium
     }
     // Fall back to proxy mode for all other cases (local dev or non-medium sizes)
-    return `${API_BASE}/api/thumbnail/${item.key}?size=${size}`
+    // Important: URL-encode the key to handle filenames with spaces and special characters
+    return `${API_BASE}/api/thumbnail/${encodeURIComponent(item.key)}?size=${size}`
   }
 
   // Generate srcset for lightbox - use large thumbnail for smaller viewports, original for larger
@@ -84,7 +85,8 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
     const sources = [`${getThumbnailUrl(item, 'large')} 800w`]
     // Use actual image width if available and valid
     if (item.width && item.width > 0) {
-      sources.push(`${getOriginalUrl(item)} ${item.width}w`)
+      // Round to integer since srcset width descriptors must be positive integers
+      sources.push(`${getOriginalUrl(item)} ${Math.round(item.width)}w`)
     } else {
       // Fallback for missing/invalid width metadata
       // Use 3000w to represent typical modern camera output (2000-6000px range)

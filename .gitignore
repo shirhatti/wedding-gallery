@@ -32,3 +32,6 @@ dist/
 
 # Debug/temporary scripts
 scripts/debug/
+
+# Playwright MCP files
+.playwright-mcp/**

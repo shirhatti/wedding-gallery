@@ -64,7 +64,8 @@ export function Gallery() {
       return item.urls.thumbnailMedium
     }
     // Fall back to proxy mode for all other cases (local dev or non-medium sizes)
-    return `${API_BASE}/api/thumbnail/${item.key}?size=${size}`
+    // Important: URL-encode the key to handle filenames with spaces and special characters
+    return `${API_BASE}/api/thumbnail/${encodeURIComponent(item.key)}?size=${size}`
   }
 
   // Generate srcset for responsive images
