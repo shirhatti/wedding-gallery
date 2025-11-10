@@ -14,6 +14,11 @@ binding = "DB"
 database_name = "wedding-photos-metadata"
 database_id = "150012ba-e8d4-4e02-8769-aafd24fe08d0"
 
+# OpenTelemetry observability configuration
+[observability]
+enabled = true
+head_sampling_rate = 1  # 100% sampling (adjust based on traffic volume)
+
 # Development settings
 [dev]
 port = 8789

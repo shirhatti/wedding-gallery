@@ -20,6 +20,11 @@ binding = "CACHE_VERSION"
 id = "cf132b95f9434658b98935f880a0b299"
 preview_id = "0e495b6647154a1a8532b0d3fafb7c82"
 
+# OpenTelemetry observability configuration
+[observability]
+enabled = true
+head_sampling_rate = 1  # 100% sampling (adjust based on traffic volume)
+
 # Development settings
 [dev]
 port = 8787
