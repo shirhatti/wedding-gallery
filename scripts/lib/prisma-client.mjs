@@ -88,10 +88,11 @@ export class PrismaBatchUpdater {
 }
 
 /**
- * Convert Date to ISO string format for database
+ * Get current date for Prisma DateTime fields
+ * Note: Prisma DateTime fields accept Date objects, not ISO strings
  */
 export function toISOString(date = new Date()) {
-  return date.toISOString();
+  return date;
 }
 
 /**

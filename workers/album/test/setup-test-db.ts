@@ -33,9 +33,9 @@ export async function setupTestDatabase(db: D1Database): Promise<void> {
       "thumbnail_medium" TEXT,
       "thumbnail_large" TEXT,
       "metadata" TEXT,
-      "processed_at" TEXT NOT NULL DEFAULT 'CURRENT_TIMESTAMP',
-      "created_at" TEXT NOT NULL DEFAULT 'CURRENT_TIMESTAMP',
-      "updated_at" TEXT NOT NULL DEFAULT 'CURRENT_TIMESTAMP'
+      "processed_at" TEXT,
+      "created_at" TEXT NOT NULL,
+      "updated_at" TEXT NOT NULL
     )
   `).run();
 
@@ -43,7 +43,7 @@ export async function setupTestDatabase(db: D1Database): Promise<void> {
   await db.prepare(`
     CREATE TABLE IF NOT EXISTS "pending_thumbnails" (
       "key" TEXT NOT NULL PRIMARY KEY,
-      "created_at" TEXT NOT NULL DEFAULT 'CURRENT_TIMESTAMP'
+      "created_at" TEXT NOT NULL
     )
   `).run();
 }
