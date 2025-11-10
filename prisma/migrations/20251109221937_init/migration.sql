@@ -25,13 +25,13 @@ CREATE TABLE "media" (
     "thumbnail_medium" TEXT,
     "thumbnail_large" TEXT,
     "metadata" TEXT,
-    "processed_at" TEXT NOT NULL DEFAULT 'CURRENT_TIMESTAMP',
-    "created_at" TEXT NOT NULL DEFAULT 'CURRENT_TIMESTAMP',
-    "updated_at" TEXT NOT NULL DEFAULT 'CURRENT_TIMESTAMP'
+    "processed_at" TEXT,
+    "created_at" TEXT NOT NULL,
+    "updated_at" TEXT NOT NULL
 );
 
 -- CreateTable
 CREATE TABLE "pending_thumbnails" (
     "key" TEXT NOT NULL PRIMARY KEY,
-    "created_at" TEXT NOT NULL DEFAULT 'CURRENT_TIMESTAMP'
+    "created_at" TEXT NOT NULL
 );
