@@ -12,6 +12,8 @@ export interface AuthConfig {
   }
   /** Set to true to disable auth checks entirely (for local development) */
   disableAuth?: boolean
+  /** The allowed domain for cross-subdomain authentication (e.g., "example.pages.dev") */
+  allowedDomain?: string
 }
 
 /**
@@ -62,7 +64,7 @@ export async function validateAuthToken(config: AuthConfig, audience: string, to
   const [tokenAudience, tokenVersion, issuedAtStr] = payload.split("|")
   if (!tokenAudience || !tokenVersion || !issuedAtStr) return false
   // Allow tokens across subdomains of the same root domain
-  if (!audiencesMatch(tokenAudience, audience)) return false
+  if (!audiencesMatch(tokenAudience, audience, config.allowedDomain)) return false
 
   const currentVersion = (await config.cacheVersion.get("auth_version")) || "1"
   if (!timingSafeEqual(tokenVersion, currentVersion)) return false
@@ -101,7 +103,7 @@ export function getAuthCookie(request: Request, cookieName = "gallery_auth"): st
 /**
  * Validates a returnTo URL for open redirect prevention
  * @param returnTo The URL to validate
- * @param allowedDomain The allowed domain pattern (e.g., "jessandsourabh.pages.dev")
+ * @param allowedDomain The allowed domain pattern (e.g., "example.pages.dev")
  * @returns boolean True if the URL is safe to redirect to
  */
 export function isValidReturnTo(returnTo: string, allowedDomain: string): boolean {
@@ -142,11 +144,17 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
  * Allows tokens to work across subdomains (e.g., preview and production deployments)
  * @param tokenAudience The audience from the token
  * @param requestAudience The audience from the current request
+ * @param allowedDomain Optional allowed domain for cross-subdomain matching
  * @returns boolean True if audiences are from the same project
  */
-function audiencesMatch(tokenAudience: string, requestAudience: string): boolean {
+function audiencesMatch(tokenAudience: string, requestAudience: string, allowedDomain?: string): boolean {
   // Exact match - fastest path
   if (timingSafeEqual(tokenAudience, requestAudience)) return true
+
+  // If no allowed domain configured, only exact matches are valid
+  if (!allowedDomain) {
+    return false
+  }
 
   // Parse origins
   let tokenUrl: URL
@@ -163,8 +171,7 @@ function audiencesMatch(tokenAudience: string, requestAudience: string): boolean
     return false
   }
 
-  // Check if both hostnames are jessandsourabh.pages.dev or its subdomains
-  const allowedDomain = 'jessandsourabh.pages.dev'
+  // Check if both hostnames are under the allowed domain or its subdomains
   const tokenIsAllowed = tokenUrl.hostname === allowedDomain || tokenUrl.hostname.endsWith(`.${allowedDomain}`)
   const requestIsAllowed = requestUrl.hostname === allowedDomain || requestUrl.hostname.endsWith(`.${allowedDomain}`)
 

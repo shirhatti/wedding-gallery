@@ -16,4 +16,5 @@ export interface VideoStreamingEnv {
   GALLERY_PASSWORD?: string;
   AUTH_SECRET?: string;
   DISABLE_AUTH?: string; // Disable auth entirely (for local dev - set to "true")
+  ALLOWED_DOMAIN?: string; // The allowed domain for cross-subdomain authentication (e.g., "example.pages.dev")
 }

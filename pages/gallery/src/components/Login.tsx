@@ -51,9 +51,10 @@ export function Login() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-purple-600 to-purple-900 px-4">
       <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-2xl">
         <div className="mb-8 text-center">
+          {/* SETUP: Replace logo URL in public/logo.svg or update this src attribute */}
           <img
-            src="https://assets.shirhatti.com/weddinglogo.svg"
-            alt="Wedding Logo"
+            src="/logo.svg"
+            alt="Logo"
             className="mx-auto h-16 w-auto"
           />
         </div>

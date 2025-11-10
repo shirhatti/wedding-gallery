@@ -34,7 +34,8 @@ export default {
         cacheVersion: {
           get: async (key: string) => env.VIDEO_CACHE.get(key)
         },
-        disableAuth: env.DISABLE_AUTH === "true"
+        disableAuth: env.DISABLE_AUTH === "true",
+        allowedDomain: env.ALLOWED_DOMAIN
       };
 
       // Use the same audience as the viewer worker (frontend origin)

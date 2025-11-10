@@ -8,6 +8,8 @@ import { createAuthToken, isValidReturnTo } from '@wedding-gallery/auth'
 interface Env {
   GALLERY_PASSWORD?: string
   AUTH_SECRET?: string
+  /** The allowed domain for authentication (e.g., "example.pages.dev") */
+  ALLOWED_DOMAIN?: string
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
@@ -25,7 +27,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const formData = await request.formData()
   const password = formData.get('password')?.toString() || ''
   const returnTo = formData.get('returnTo')?.toString() || '/'
-  const validReturnTo = isValidReturnTo(returnTo, 'jessandsourabh.pages.dev') ? returnTo : '/'
+  // Use configured domain or fallback to current hostname
+  const allowedDomain = env.ALLOWED_DOMAIN || url.hostname
+  const validReturnTo = isValidReturnTo(returnTo, allowedDomain) ? returnTo : '/'
 
   if (env.GALLERY_PASSWORD && password === env.GALLERY_PASSWORD) {
     const headers = new Headers()
