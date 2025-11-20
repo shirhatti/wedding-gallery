@@ -1,5 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { MediaPlayer, MediaProvider, isHLSProvider } from '@vidstack/react'
+import { defaultLayoutIcons, DefaultVideoLayout } from '@vidstack/react/player/layouts/default'
+import '@vidstack/react/player/styles/default/theme.css'
+import '@vidstack/react/player/styles/default/layouts/video.css'
 import Hls from 'hls.js'
 import { MediaItem } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -15,10 +19,7 @@ interface LightboxProps {
 
 export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
-  const [authToken, setAuthToken] = useState<string | null>(null)
   const [imageError, setImageError] = useState(false)
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const hlsRef = useRef<Hls | null>(null)
 
   // Track mobile viewport state and update on resize/rotation
   const [isMobile, setIsMobile] = useState(() =>
@@ -39,24 +40,6 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
   useEffect(() => {
     setImageError(false)
   }, [currentIndex])
-
-  // Fetch auth token on mount for HLS URLs (needed for iOS Safari)
-  useEffect(() => {
-    async function fetchAuthToken() {
-      try {
-        const response = await fetch(`${API_BASE}/api/auth-token`, {
-          credentials: 'include'
-        })
-        if (response.ok) {
-          const data = await response.json()
-          setAuthToken(data.token)
-        }
-      } catch (error) {
-        console.error('Failed to fetch auth token:', error)
-      }
-    }
-    fetchAuthToken()
-  }, [])
 
   // Helper to get original URL - supports both pre-signed URLs and proxy mode
   const getOriginalUrl = (item: MediaItem): string => {
@@ -116,88 +99,17 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
       document.body.style.overflow = ''
-      cleanupVideo()
     }
   }, [currentIndex, isMobile])
 
-  useEffect(() => {
-    if (isVideo && videoRef.current) {
-      loadVideo()
-    } else {
-      cleanupVideo()
-    }
-
-    return () => cleanupVideo()
-  }, [currentIndex, isVideo, authToken])
-
-  const cleanupVideo = () => {
-    if (hlsRef.current) {
-      hlsRef.current.destroy()
-      hlsRef.current = null
-    }
-    if (videoRef.current) {
-      videoRef.current.pause()
-      videoRef.current.src = ''
-    }
-  }
-
-  const loadVideo = async () => {
-    if (!videoRef.current) return
-
-    const video = videoRef.current
-    // Append auth token to HLS URL for iOS Safari compatibility
-    let hlsUrl = `${API_BASE}/api/hls/playlist?key=${encodeURIComponent(currentItem.key)}`
-    if (authToken) {
-      hlsUrl += `&token=${encodeURIComponent(authToken)}`
-    }
-
-    try {
-      // Prioritize native HLS support on Safari for AirPlay compatibility
-      // AirPlay doesn't work with HLS.js (MSE), so we must use native playback
-      if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS support (Safari) - uses URL with token and supports AirPlay
-        video.src = hlsUrl
-        video.load()
-      } else if (Hls.isSupported()) {
-        // Use HLS.js for browsers without native HLS support
-        const hls = new Hls({
-          enableWorker: true,
-          lowLatencyMode: false,
-          backBufferLength: 90,
-          xhrSetup: (xhr) => {
-            xhr.withCredentials = true
-          },
-        })
-
-        hlsRef.current = hls
-        hls.loadSource(hlsUrl)
-        hls.attachMedia(video)
-
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          video.play().catch(() => {})
-        })
-
-        hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (data.fatal) {
-            console.error('HLS fatal error, falling back to MP4')
-            cleanupVideo()
-            video.src = getOriginalUrl(currentItem)
-            video.load()
-          }
-        })
-      } else {
-        throw new Error('HLS not available')
-      }
-    } catch (e) {
-      // Fall back to direct MP4
-      video.src = getOriginalUrl(currentItem)
-      video.load()
-    }
-  }
-
   const navigate = (direction: number) => {
-    cleanupVideo()
     setCurrentIndex((prev) => (prev + direction + media.length) % media.length)
+  }
+
+  // Generate video source - prefer HLS if available, fallback to direct MP4
+  const getVideoSource = (item: MediaItem): string => {
+    // Vidstack will automatically detect HLS based on the response Content-Type
+    return `${API_BASE}/api/hls/playlist?key=${encodeURIComponent(item.key)}`
   }
 
   return (
@@ -242,12 +154,28 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
       {/* Media content */}
       <div className="relative flex h-full w-full items-center justify-center p-4">
         {isVideo ? (
-          <video
-            ref={videoRef}
-            controls
-            className="max-h-[90vh] max-w-full"
+          <MediaPlayer
+            src={getVideoSource(currentItem)}
             playsInline
-          />
+            className="max-h-[90vh] max-w-full"
+            onProviderChange={(provider) => {
+              // Configure HLS.js when it's being used
+              if (isHLSProvider(provider)) {
+                provider.library = Hls
+                provider.config = {
+                  enableWorker: true,
+                  lowLatencyMode: false,
+                  backBufferLength: 90,
+                  xhrSetup: (xhr: XMLHttpRequest) => {
+                    xhr.withCredentials = true
+                  },
+                }
+              }
+            }}
+          >
+            <MediaProvider />
+            <DefaultVideoLayout icons={defaultLayoutIcons} />
+          </MediaPlayer>
         ) : imageError ? (
           <div className="flex flex-col items-center justify-center text-zinc-400">
             <svg

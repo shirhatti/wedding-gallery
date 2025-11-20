@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vidstack/react": "^1.12.13",
     "@wedding-gallery/auth": "*",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
