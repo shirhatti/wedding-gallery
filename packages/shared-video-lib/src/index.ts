@@ -28,3 +28,42 @@ export type { M3U8RewriteOptions } from "./m3u8-handler";
 // Progressive manifest delivery
 export { generateProgressiveManifest, generateLazyManifest } from "./progressive-manifest";
 export type { ProgressiveManifestOptions } from "./progressive-manifest";
+
+// Video Content Storage & Query System
+export { BloomFilter, createBloomFilter, checkBloomFilter } from "./bloom-filter";
+export { CountMinSketch, createCountMinSketch, estimateFromSketch, calculateOptimalDimensions } from "./count-min-sketch";
+
+// Manifest builders
+export {
+  createWeddingManifest,
+  createVideographerManifest,
+  createSegmentManifest,
+  createTimeIndex,
+  createPersonIndex,
+  createMomentIndex,
+  createGlobalPersonIndex,
+  createGlobalMomentIndex,
+  serializeManifest,
+  parseManifest,
+  getManifestKey
+} from "./manifest-builder";
+
+// Index builders
+export {
+  buildTimeIndex,
+  findSegmentsInTimeRange,
+  buildPersonIndex,
+  buildPeopleBloomFilter,
+  buildPeopleSketch,
+  buildMomentIndex,
+  buildMomentsBloomFilter,
+  mergePersonIndexes,
+  filterByConfidence,
+  findPersonSegments,
+  findPeopleInSegment,
+  getTopPeople
+} from "./index-builder";
+export type { SegmentInput, PersonAppearanceInput, MomentInput } from "./index-builder";
+
+// Manifest types
+export type * from "./types/manifests";

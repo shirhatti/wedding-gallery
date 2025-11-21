@@ -5,6 +5,8 @@
 
 import { handleHLSPlaylist } from "./handlers/hls";
 import { handleLazySegment } from "./handlers/lazy-segments";
+import { handlePersonSearch, handlePersonList } from "./handlers/person-search";
+import { handleMomentSearch, handleMomentList } from "./handlers/moment-search";
 import {
   getSigningConfig,
   isVideoSigningEnabled,
@@ -60,8 +62,21 @@ export default {
       }
     }
 
-    // Route handling - video streaming only
-    if (url.pathname === "/api/hls/playlist") {
+    // Route handling
+
+    // Video content query routes
+    if (url.pathname === "/api/video/search/person") {
+      return handlePersonSearch(request, env);
+    } else if (url.pathname === "/api/video/people") {
+      return handlePersonList(request, env);
+    } else if (url.pathname === "/api/video/search/moment") {
+      return handleMomentSearch(request, env);
+    } else if (url.pathname === "/api/video/moments") {
+      return handleMomentList(request, env);
+    }
+
+    // HLS streaming routes
+    else if (url.pathname === "/api/hls/playlist") {
       return handleHLSPlaylist(request, env);
     } else if (url.pathname.startsWith("/api/hls-segment/")) {
       return handleLazySegment(url, env);

@@ -69,3 +69,156 @@ model PendingThumbnails {
 
   @@map("pending_thumbnails")
 }
+
+// ============================================================================
+// Video Content Storage & Query System
+// ============================================================================
+
+model Videographer {
+  id          String   @id // e.g., "videographer_main", "videographer_guest_1"
+  name        String   // Display name
+  operator    String?  // Who's operating this camera
+  role        String   // "primary", "guest", "drone", etc.
+  weddingId   String?  @map("wedding_id")
+  createdAt   DateTime @map("created_at")
+  updatedAt   DateTime @map("updated_at")
+
+  segments    VideoSegment[]
+
+  @@map("videographers")
+}
+
+model VideoSegment {
+  id              String   @id // e.g., "seg_ceremony_001"
+  videographerId  String   @map("videographer_id")
+  mediaKey        String   @map("media_key") // Reference to Media.key
+
+  // Timing
+  sequence        Int      // Sequential number within videographer
+  startTime       DateTime @map("start_time")
+  endTime         DateTime @map("end_time")
+  duration        Float    // Duration in seconds
+
+  // Storage paths (all in R2)
+  videoUri        String   @map("video_uri")        // Full quality video
+  videoLowUri     String?  @map("video_low_uri")    // Low quality variant
+  audioUri        String?  @map("audio_uri")        // Separate audio track
+  thumbnailUri    String   @map("thumbnail_uri")
+  detectionsUri   String?  @map("detections_uri")   // ML detections JSON
+
+  // Quick metadata
+  hasMotion       Boolean  @default(true) @map("has_motion")
+  hasAudio        Boolean  @default(true) @map("has_audio")
+  faceCount       Int      @default(0) @map("face_count")
+
+  // Moments this segment belongs to
+  momentId        String?  @map("moment_id")
+
+  createdAt       DateTime @map("created_at")
+  updatedAt       DateTime @map("updated_at")
+
+  videographer    Videographer @relation(fields: [videographerId], references: [id])
+  moment          WeddingMoment? @relation(fields: [momentId], references: [id])
+  appearances     PersonAppearance[]
+
+  @@index([videographerId, sequence])
+  @@index([startTime, endTime])
+  @@index([momentId])
+  @@map("video_segments")
+}
+
+model WeddingMoment {
+  id              String   @id // e.g., "ceremony_entrance", "first_dance"
+  name            String   // Display name
+  momentType      String   @map("moment_type") // "ceremony", "reception_event", "preparation"
+
+  // Timing
+  startTime       DateTime @map("start_time")
+  endTime         DateTime @map("end_time")
+  duration        Float    // Duration in seconds
+
+  // Multi-angle info
+  videographerCount Int    @default(1) @map("videographer_count")
+
+  // Tags and classification
+  tags            String   // JSON array of tags
+  featured        Boolean  @default(false) // Is this a highlight moment?
+
+  createdAt       DateTime @map("created_at")
+  updatedAt       DateTime @map("updated_at")
+
+  segments        VideoSegment[]
+
+  @@index([startTime, endTime])
+  @@index([momentType])
+  @@map("wedding_moments")
+}
+
+model Person {
+  id              String   @id // e.g., "person_bride", "person_groom"
+  name            String
+  role            String?  // "bride", "groom", "maid_of_honor", "best_man", "guest"
+
+  // ML identifiers (for future face recognition)
+  faceEmbedding   String?  @map("face_embedding") // Base64 encoded embedding
+
+  // Stats
+  appearanceCount Int      @default(0) @map("appearance_count")
+  totalDuration   Float    @default(0) @map("total_duration") // Total seconds in footage
+
+  createdAt       DateTime @map("created_at")
+  updatedAt       DateTime @map("updated_at")
+
+  appearances     PersonAppearance[]
+
+  @@map("people")
+}
+
+model PersonAppearance {
+  id              String   @id @default(uuid())
+  personId        String   @map("person_id")
+  segmentId       String   @map("segment_id")
+
+  // Timing within segment
+  startOffset     Float    @map("start_offset") // Seconds from segment start
+  endOffset       Float    @map("end_offset")
+  duration        Float    // Duration in seconds
+
+  // Detection confidence
+  confidence      Float    // 0.0 to 1.0
+  frameCount      Int      @map("frame_count") // Number of frames person appears in
+
+  // Quick reference
+  thumbnailUri    String?  @map("thumbnail_uri")
+
+  createdAt       DateTime @map("created_at")
+
+  person          Person @relation(fields: [personId], references: [id])
+  segment         VideoSegment @relation(fields: [segmentId], references: [id])
+
+  @@index([personId, segmentId])
+  @@index([segmentId])
+  @@map("person_appearances")
+}
+
+model VideoIndex {
+  id              String   @id // e.g., "videographer_main_people_bloom", "global_moments_index"
+  indexType       String   @map("index_type") // "bloom", "inverted", "timeline", "sketch"
+  contentType     String   @map("content_type") // "people", "moments", "timeline", "global"
+  scope           String   // "videographer_main", "global", "moment_first_dance"
+
+  // Storage location in R2
+  r2Uri           String   @map("r2_uri")
+
+  // Metadata
+  size            Int      // Size in bytes
+  itemCount       Int      @default(0) @map("item_count") // Number of indexed items
+  version         Int      @default(1) // For cache busting
+
+  createdAt       DateTime @map("created_at")
+  updatedAt       DateTime @map("updated_at")
+
+  @@unique([indexType, contentType, scope])
+  @@index([indexType, contentType])
+  @@map("video_indexes")
+}
