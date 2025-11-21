@@ -4,7 +4,6 @@ import { MediaPlayer, MediaProvider, isHLSProvider } from '@vidstack/react'
 import { defaultLayoutIcons, DefaultVideoLayout } from '@vidstack/react/player/layouts/default'
 import '@vidstack/react/player/styles/default/theme.css'
 import '@vidstack/react/player/styles/default/layouts/video.css'
-import Hls from 'hls.js'
 import { MediaItem } from '@/types'
 import { Button } from '@/components/ui/button'
 import { MOBILE_BREAKPOINT, LIGHTBOX_SIZES } from '@/lib/constants'
@@ -160,8 +159,8 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
             className="max-h-[90vh] max-w-full"
             onProviderChange={(provider) => {
               // Configure HLS.js when it's being used
+              // Vidstack will automatically load hls.js from CDN
               if (isHLSProvider(provider)) {
-                provider.library = Hls
                 provider.config = {
                   enableWorker: true,
                   lowLatencyMode: false,
