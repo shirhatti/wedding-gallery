@@ -1,19 +1,30 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Play } from 'lucide-react'
 import Masonry from 'react-masonry-css'
 import { MediaItem } from '@/types'
 import { Lightbox } from './Lightbox'
 import { LazyImage } from './LazyImage'
+import { Navigation } from './Navigation'
 import { cn } from '@/lib/utils'
 import { LAYOUT_BREAKPOINTS, THUMBNAIL_SIZES } from '@/lib/constants'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
-export function Gallery() {
+interface GalleryProps {
+  filter?: 'image' | 'video'
+}
+
+export function Gallery({ filter }: GalleryProps) {
   const [media, setMedia] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
+
+  // Filter media based on the type prop
+  const filteredMedia = useMemo(() => {
+    if (!filter) return media
+    return media.filter(item => item.type === filter)
+  }, [media, filter])
 
   // Responsive breakpoints for masonry columns
   const breakpointColumns = {
@@ -101,10 +112,28 @@ export function Gallery() {
     )
   }
 
-  if (media.length === 0) {
+  const noMediaMessage = filteredMedia.length === 0
+    ? filter === 'video'
+      ? 'No videos found'
+      : filter === 'image'
+      ? 'No images found'
+      : 'No media found'
+    : null
+
+  if (noMediaMessage) {
     return (
-      <div className="flex h-screen items-center justify-center bg-zinc-900">
-        <p className="text-xl text-zinc-400">No media found</p>
+      <div className="min-h-screen bg-zinc-900">
+        <div className="sticky top-0 z-40 mb-4 border-b border-zinc-800 bg-black px-4 py-4 text-center md:relative md:border-none md:bg-transparent">
+          <img
+            src="https://assets.shirhatti.com/weddinglogo.svg"
+            alt="Wedding Logo"
+            className="mx-auto h-10 w-auto md:h-15"
+          />
+        </div>
+        {filter && <Navigation />}
+        <div className="flex items-center justify-center pt-20">
+          <p className="text-xl text-zinc-400">{noMediaMessage}</p>
+        </div>
       </div>
     )
   }
@@ -121,6 +150,9 @@ export function Gallery() {
           />
         </div>
 
+        {/* Navigation - only show when filter is applied */}
+        {filter && <Navigation />}
+
         {/* Gallery Grid - Masonry Layout */}
         <div className="mx-auto max-w-[1600px] px-2 md:px-6">
           <Masonry
@@ -128,7 +160,7 @@ export function Gallery() {
             className="flex -ml-4 w-auto"
             columnClassName="pl-4 bg-clip-padding"
           >
-            {media.map((item, index) => (
+            {filteredMedia.map((item, index) => (
               <button
                 key={item.key}
                 onClick={() => setSelectedIndex(index)}
@@ -173,7 +205,7 @@ export function Gallery() {
       {/* Lightbox */}
       {selectedIndex !== null && (
         <Lightbox
-          media={media}
+          media={filteredMedia}
           initialIndex={selectedIndex}
           onClose={() => setSelectedIndex(null)}
         />
