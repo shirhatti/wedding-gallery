@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
-import { MediaPlayer, MediaProvider, isHLSProvider } from '@vidstack/react'
+import {
+  MediaPlayer,
+  MediaProvider,
+  isHLSProvider,
+  AirPlayButton,
+  GoogleCastButton
+} from '@vidstack/react'
 import { defaultLayoutIcons, DefaultVideoLayout } from '@vidstack/react/player/layouts/default'
 import '@vidstack/react/player/styles/default/theme.css'
 import '@vidstack/react/player/styles/default/layouts/video.css'
@@ -199,7 +205,13 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
             }}
           >
             <MediaProvider />
-            <DefaultVideoLayout icons={defaultLayoutIcons} />
+            <DefaultVideoLayout
+              icons={defaultLayoutIcons}
+              slots={{
+                airPlayButton: <AirPlayButton />,
+                googleCastButton: <GoogleCastButton />,
+              }}
+            />
           </MediaPlayer>
         ) : imageError ? (
           <div className="flex flex-col items-center justify-center text-zinc-400">
