@@ -1,39 +1,50 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Images, Video } from 'lucide-react'
+import { Images, Video, LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+interface NavTabProps {
+  to: string
+  icon: LucideIcon
+  label: string
+  isActive: boolean
+}
+
+function NavTab({ to, icon: Icon, label, isActive }: NavTabProps) {
+  return (
+    <Link
+      to={to}
+      aria-current={isActive ? 'page' : undefined}
+      className={cn(
+        'flex items-center gap-2 rounded-md px-6 py-2.5 text-sm font-medium transition-all',
+        isActive
+          ? 'bg-white text-zinc-900 shadow-sm'
+          : 'text-zinc-400 hover:text-white'
+      )}
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </Link>
+  )
+}
 
 export function Navigation() {
   const location = useLocation()
-  const isImages = location.pathname === '/images'
-  const isVideos = location.pathname === '/videos'
 
   return (
     <div className="mb-6 flex justify-center">
-      <div className="inline-flex rounded-lg bg-zinc-800 p-1">
-        <Link
+      <div className="inline-flex rounded-lg bg-zinc-800 p-1" role="tablist">
+        <NavTab
           to="/images"
-          className={cn(
-            "flex items-center gap-2 rounded-md px-6 py-2.5 text-sm font-medium transition-all",
-            isImages
-              ? "bg-white text-zinc-900 shadow-sm"
-              : "text-zinc-400 hover:text-white"
-          )}
-        >
-          <Images className="h-4 w-4" />
-          Images
-        </Link>
-        <Link
+          icon={Images}
+          label="Images"
+          isActive={location.pathname === '/images'}
+        />
+        <NavTab
           to="/videos"
-          className={cn(
-            "flex items-center gap-2 rounded-md px-6 py-2.5 text-sm font-medium transition-all",
-            isVideos
-              ? "bg-white text-zinc-900 shadow-sm"
-              : "text-zinc-400 hover:text-white"
-          )}
-        >
-          <Video className="h-4 w-4" />
-          Videos
-        </Link>
+          icon={Video}
+          label="Videos"
+          isActive={location.pathname === '/videos'}
+        />
       </div>
     </div>
   )
