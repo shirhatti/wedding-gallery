@@ -190,30 +190,32 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
       {/* Media content */}
       <div className="relative flex h-full w-full items-center justify-center p-4">
         {isVideo ? (
-          <MediaPlayer
-            src={getVideoSource(currentItem)}
-            playsInline
-            className="max-h-[90vh] max-w-full"
-            onProviderChange={(provider) => {
-              // Configure HLS.js when it's being used (non-Safari browsers)
-              // Use ExtendedHls to enable AirPlay support
-              // Note: Safari uses native HLS and relies on token in URL (above)
-              if (isHLSProvider(provider)) {
-                provider.library = ExtendedHls
-                provider.config = {
-                  enableWorker: true,
-                  lowLatencyMode: false,
-                  backBufferLength: 90,
-                  xhrSetup: (xhr: XMLHttpRequest) => {
-                    xhr.withCredentials = true
-                  },
+          <div className="w-full max-w-full" style={{ aspectRatio: '16/9', maxHeight: '90vh' }}>
+            <MediaPlayer
+              src={getVideoSource(currentItem)}
+              playsInline
+              className="w-full h-full"
+              onProviderChange={(provider) => {
+                // Configure HLS.js when it's being used (non-Safari browsers)
+                // Use ExtendedHls to enable AirPlay support
+                // Note: Safari uses native HLS and relies on token in URL (above)
+                if (isHLSProvider(provider)) {
+                  provider.library = ExtendedHls
+                  provider.config = {
+                    enableWorker: true,
+                    lowLatencyMode: false,
+                    backBufferLength: 90,
+                    xhrSetup: (xhr: XMLHttpRequest) => {
+                      xhr.withCredentials = true
+                    },
+                  }
                 }
-              }
-            }}
-          >
-            <MediaProvider />
-            <DefaultVideoLayout icons={defaultLayoutIcons} />
-          </MediaPlayer>
+              }}
+            >
+              <MediaProvider />
+              <DefaultVideoLayout icons={defaultLayoutIcons} />
+            </MediaPlayer>
+          </div>
         ) : imageError ? (
           <div className="flex flex-col items-center justify-center text-zinc-400">
             <svg
