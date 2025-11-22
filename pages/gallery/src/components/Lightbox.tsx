@@ -2,14 +2,27 @@ import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import {
   MediaPlayer,
-  MediaProvider
+  MediaProvider,
+  isHLSProvider
 } from '@vidstack/react'
 import { defaultLayoutIcons, DefaultVideoLayout } from '@vidstack/react/player/layouts/default'
 import '@vidstack/react/player/styles/default/theme.css'
 import '@vidstack/react/player/styles/default/layouts/video.css'
+import Hls from 'hls.js'
 import { MediaItem } from '@/types'
 import { Button } from '@/components/ui/button'
 import { MOBILE_BREAKPOINT, LIGHTBOX_SIZES } from '@/lib/constants'
+
+// Extended HLS class to enable AirPlay support
+// hls.js sets disableRemotePlayback=true by default, blocking AirPlay
+// Fix for: https://github.com/vidstack/player/issues/1522
+class ExtendedHls extends Hls {
+  attachMedia(media: HTMLMediaElement) {
+    super.attachMedia(media)
+    // Enable remote playback (AirPlay) after hls.js attaches
+    media.disableRemotePlayback = false
+  }
+}
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
@@ -186,6 +199,12 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
             playsInline
             streamType="on-demand"
             className="max-h-[90vh] max-w-full"
+            onProviderChange={(provider) => {
+              // Configure hls.js to use ExtendedHls class for AirPlay support
+              if (isHLSProvider(provider)) {
+                provider.library = ExtendedHls
+              }
+            }}
           >
             <MediaProvider />
             <DefaultVideoLayout icons={defaultLayoutIcons} />
