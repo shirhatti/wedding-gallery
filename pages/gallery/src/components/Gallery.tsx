@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Play } from 'lucide-react'
 import Masonry from 'react-masonry-css'
-import { MediaItem } from '@/types'
+import type { MediaItem } from '@/types'
 import { Lightbox } from './Lightbox'
 import { LazyImage } from './LazyImage'
 import { Navigation } from './Navigation'
@@ -12,10 +12,10 @@ import { LAYOUT_BREAKPOINTS, THUMBNAIL_SIZES } from '@/lib/constants'
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
 interface GalleryProps {
-  filter?: 'image' | 'video'
+  filterBy?: 'image' | 'video'
 }
 
-export function Gallery({ filter }: GalleryProps) {
+export function Gallery({ filterBy }: GalleryProps) {
   const [media, setMedia] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -23,9 +23,14 @@ export function Gallery({ filter }: GalleryProps) {
 
   // Filter media based on the type prop
   const filteredMedia = useMemo(() => {
-    if (!filter) return media
-    return media.filter(item => item.type === filter)
-  }, [media, filter])
+    if (!filterBy) return media
+    return media.filter(item => item.type === filterBy)
+  }, [media, filterBy])
+
+  // Reset selected index when filter changes to prevent out-of-bounds errors
+  useEffect(() => {
+    setSelectedIndex(null)
+  }, [filterBy])
 
   // Responsive breakpoints for masonry columns
   const breakpointColumns = {
@@ -114,9 +119,9 @@ export function Gallery({ filter }: GalleryProps) {
   }
 
   const noMediaMessage = filteredMedia.length === 0
-    ? filter === 'video'
+    ? filterBy === 'video'
       ? 'No videos found'
-      : filter === 'image'
+      : filterBy === 'image'
       ? 'No images found'
       : 'No media found'
     : null
@@ -125,7 +130,6 @@ export function Gallery({ filter }: GalleryProps) {
     return (
       <div className="min-h-screen bg-zinc-900">
         <GalleryHeader />
-        {filter && <Navigation />}
         <div className="flex items-center justify-center pt-20">
           <p className="text-xl text-zinc-400">{noMediaMessage}</p>
         </div>
@@ -140,7 +144,7 @@ export function Gallery({ filter }: GalleryProps) {
         <GalleryHeader />
 
         {/* Navigation - only show when filter is applied */}
-        {filter && <Navigation />}
+        {filterBy && <Navigation />}
 
         {/* Gallery Grid - Masonry Layout */}
         <div className="mx-auto max-w-[1600px] px-2 md:px-6">

@@ -13,7 +13,9 @@ function NavTab({ to, icon: Icon, label, isActive }: NavTabProps) {
   return (
     <Link
       to={to}
+      role="tab"
       aria-current={isActive ? 'page' : undefined}
+      aria-selected={isActive}
       className={cn(
         'flex items-center gap-2 rounded-md px-6 py-2.5 text-sm font-medium transition-all',
         isActive

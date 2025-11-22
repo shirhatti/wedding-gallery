@@ -8,8 +8,8 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Gallery />} />
-          <Route path="/images" element={<Gallery filter="image" />} />
-          <Route path="/videos" element={<Gallery filter="video" />} />
+          <Route path="/images" element={<Gallery filterBy="image" />} />
+          <Route path="/videos" element={<Gallery filterBy="video" />} />
           <Route path="/login" element={<Login />} />
         </Routes>
       </BrowserRouter>
