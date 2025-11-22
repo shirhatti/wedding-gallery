@@ -18,6 +18,7 @@ interface LightboxProps {
 
 export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
+  const [authToken, setAuthToken] = useState<string | null>(null)
   const [imageError, setImageError] = useState(false)
 
   // Track mobile viewport state and update on resize/rotation
@@ -39,6 +40,25 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
   useEffect(() => {
     setImageError(false)
   }, [currentIndex])
+
+  // Fetch auth token on mount for HLS URLs (needed for iOS Safari native HLS playback)
+  // iOS Safari uses native HLS and doesn't send cookies, so we need token in URL
+  useEffect(() => {
+    async function fetchAuthToken() {
+      try {
+        const response = await fetch(`${API_BASE}/api/auth-token`, {
+          credentials: 'include'
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setAuthToken(data.token)
+        }
+      } catch (error) {
+        console.error('Failed to fetch auth token:', error)
+      }
+    }
+    fetchAuthToken()
+  }, [])
 
   // Helper to get original URL - supports both pre-signed URLs and proxy mode
   const getOriginalUrl = (item: MediaItem): string => {
@@ -107,8 +127,13 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
 
   // Generate video source - prefer HLS if available, fallback to direct MP4
   const getVideoSource = (item: MediaItem): string => {
-    // Vidstack will automatically detect HLS based on the response Content-Type
-    return `${API_BASE}/api/hls/playlist?key=${encodeURIComponent(item.key)}`
+    // Append auth token to HLS URL for iOS Safari native HLS playback
+    // iOS Safari doesn't send cookies with video segment requests
+    let hlsUrl = `${API_BASE}/api/hls/playlist?key=${encodeURIComponent(item.key)}`
+    if (authToken) {
+      hlsUrl += `&token=${encodeURIComponent(authToken)}`
+    }
+    return hlsUrl
   }
 
   return (
@@ -158,8 +183,9 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
             playsInline
             className="max-h-[90vh] max-w-full"
             onProviderChange={(provider) => {
-              // Configure HLS.js when it's being used
+              // Configure HLS.js when it's being used (non-Safari browsers)
               // Vidstack will automatically load hls.js from CDN
+              // Note: Safari uses native HLS and relies on token in URL (above)
               if (isHLSProvider(provider)) {
                 provider.config = {
                   enableWorker: true,
