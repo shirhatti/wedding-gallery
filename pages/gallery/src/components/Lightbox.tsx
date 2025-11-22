@@ -184,7 +184,6 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
           <MediaPlayer
             src={getVideoSource(currentItem)}
             playsInline
-            crossOrigin
             streamType="on-demand"
             className="max-h-[90vh] max-w-full"
           >
