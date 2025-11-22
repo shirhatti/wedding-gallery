@@ -5,6 +5,7 @@ import { MediaItem } from '@/types'
 import { Lightbox } from './Lightbox'
 import { LazyImage } from './LazyImage'
 import { Navigation } from './Navigation'
+import { GalleryHeader } from './GalleryHeader'
 import { cn } from '@/lib/utils'
 import { LAYOUT_BREAKPOINTS, THUMBNAIL_SIZES } from '@/lib/constants'
 
@@ -123,13 +124,7 @@ export function Gallery({ filter }: GalleryProps) {
   if (noMediaMessage) {
     return (
       <div className="min-h-screen bg-zinc-900">
-        <div className="sticky top-0 z-40 mb-4 border-b border-zinc-800 bg-black px-4 py-4 text-center md:relative md:border-none md:bg-transparent">
-          <img
-            src="https://assets.shirhatti.com/weddinglogo.svg"
-            alt="Wedding Logo"
-            className="mx-auto h-10 w-auto md:h-15"
-          />
-        </div>
+        <GalleryHeader />
         {filter && <Navigation />}
         <div className="flex items-center justify-center pt-20">
           <p className="text-xl text-zinc-400">{noMediaMessage}</p>
@@ -142,13 +137,7 @@ export function Gallery({ filter }: GalleryProps) {
     <>
       <div className="min-h-screen bg-zinc-900 pb-8 pt-4 md:pt-8">
         {/* Header */}
-        <div className="sticky top-0 z-40 mb-4 border-b border-zinc-800 bg-black px-4 py-4 text-center md:relative md:border-none md:bg-transparent">
-          <img
-            src="https://assets.shirhatti.com/weddinglogo.svg"
-            alt="Wedding Logo"
-            className="mx-auto h-10 w-auto md:h-15"
-          />
-        </div>
+        <GalleryHeader />
 
         {/* Navigation - only show when filter is applied */}
         {filter && <Navigation />}
