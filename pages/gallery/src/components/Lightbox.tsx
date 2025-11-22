@@ -10,9 +10,21 @@ import {
 import { defaultLayoutIcons, DefaultVideoLayout } from '@vidstack/react/player/layouts/default'
 import '@vidstack/react/player/styles/default/theme.css'
 import '@vidstack/react/player/styles/default/layouts/video.css'
+import Hls from 'hls.js'
 import { MediaItem } from '@/types'
 import { Button } from '@/components/ui/button'
 import { MOBILE_BREAKPOINT, LIGHTBOX_SIZES } from '@/lib/constants'
+
+// Extended HLS class to enable AirPlay support
+// Fix for: https://github.com/vidstack/player/issues/1522
+class ExtendedHls extends Hls {
+  attachMedia(media: HTMLMediaElement) {
+    super.attachMedia(media)
+    // Enable remote playback (AirPlay) and autoplay for iOS compatibility
+    media.disableRemotePlayback = false
+    media.autoplay = true
+  }
+}
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
@@ -190,9 +202,10 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
             className="max-h-[90vh] max-w-full"
             onProviderChange={(provider) => {
               // Configure HLS.js when it's being used (non-Safari browsers)
-              // Vidstack will automatically load hls.js from CDN
+              // Use ExtendedHls to enable AirPlay support
               // Note: Safari uses native HLS and relies on token in URL (above)
               if (isHLSProvider(provider)) {
+                provider.library = ExtendedHls
                 provider.config = {
                   enableWorker: true,
                   lowLatencyMode: false,
