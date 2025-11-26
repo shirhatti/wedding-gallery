@@ -1,6 +1,6 @@
 import { handleGetFile } from "./handlers/media";
 import { signR2Url, getSigningConfig } from "@wedding-gallery/shared-video-lib";
-import { validateAuthToken, getAuthCookie } from "@wedding-gallery/auth";
+import { checkAuth } from "@wedding-gallery/auth";
 import { createPrismaClient } from "./lib/prisma";
 
 interface Env {
@@ -42,31 +42,11 @@ export default {
       // Check authentication if password is set
       // Note: /login is now handled by Pages Function
       if (env.GALLERY_PASSWORD) {
-        const authValue = getAuthCookie(request);
-
-        // Extract audience the same way we do during login
-        // Try Origin header first, then Referer, finally fallback to url.origin
-        let audience = request.headers.get("Origin");
-        if (!audience) {
-          const referer = request.headers.get("Referer");
-          if (referer) {
-            try {
-              const refererUrl = new URL(referer);
-              audience = refererUrl.origin;
-            } catch {}
-          }
-        }
-        audience = audience || url.origin;
-
-        const valid = await validateAuthToken(
-          {
-            secret: env.AUTH_SECRET!,
-            cacheVersion: env.CACHE_VERSION,
-            disableAuth: env.DISABLE_AUTH === "true"
-          },
-          audience,
-          authValue
-        );
+        const { valid } = await checkAuth(request, url, {
+          secret: env.AUTH_SECRET!,
+          cacheVersion: env.CACHE_VERSION,
+          disableAuth: env.DISABLE_AUTH === "true"
+        });
 
         if (!valid) {
           // For API requests, return 401 so client can handle redirect

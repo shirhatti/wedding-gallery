@@ -122,6 +122,73 @@ export function isValidReturnTo(returnTo: string, allowedDomain: string): boolea
 }
 
 /**
+ * Options for the auth middleware
+ */
+export interface CheckAuthOptions {
+  /** Allow extracting token from query parameter (for iOS Safari HLS requests) */
+  allowQueryToken?: boolean
+  /** Query parameter name for token (defaults to "token") */
+  queryTokenParam?: string
+}
+
+/**
+ * Result of auth check
+ */
+export interface CheckAuthResult {
+  /** Whether the request is authorized */
+  valid: boolean
+  /** The audience extracted from the request */
+  audience: string
+}
+
+/**
+ * Middleware function that extracts auth token and validates it
+ * Consolidates common auth logic used across workers
+ *
+ * @param request The incoming request
+ * @param url The parsed URL (passed separately to avoid re-parsing)
+ * @param config Auth configuration with secret and cache version
+ * @param options Optional configuration for token extraction
+ * @returns Promise<CheckAuthResult> Result with valid flag and extracted audience
+ */
+export async function checkAuth(
+  request: Request,
+  url: URL,
+  config: AuthConfig,
+  options?: CheckAuthOptions
+): Promise<CheckAuthResult> {
+  // Extract token from cookie first
+  let authValue = getAuthCookie(request)
+
+  // Fallback to query parameter if allowed (for iOS Safari HLS requests)
+  if (!authValue && options?.allowQueryToken) {
+    const paramName = options.queryTokenParam ?? "token"
+    authValue = url.searchParams.get(paramName) || ""
+  }
+
+  // Extract audience from headers
+  // Try Origin header first (for CORS requests), then Referer, finally fallback to url.origin
+  let audience = request.headers.get("Origin")
+  if (!audience) {
+    const referer = request.headers.get("Referer")
+    if (referer) {
+      try {
+        const refererUrl = new URL(referer)
+        audience = refererUrl.origin
+      } catch {
+        // Invalid referer URL, ignore
+      }
+    }
+  }
+  audience = audience || url.origin
+
+  // Validate the token
+  const valid = await validateAuthToken(config, audience, authValue)
+
+  return { valid, audience }
+}
+
+/**
  * Converts ArrayBuffer to base64 string
  * @param buffer The buffer to convert
  * @returns string Base64-encoded string

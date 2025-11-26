@@ -11,7 +11,7 @@ import {
   batchSignWithCache,
   generateProgressiveManifest
 } from "@wedding-gallery/shared-video-lib";
-import { validateAuthToken, getAuthCookie } from "@wedding-gallery/auth";
+import { checkAuth } from "@wedding-gallery/auth";
 import { sanitizeVideoKey, sanitizeFilename } from "./lib/security";
 import type { VideoStreamingEnv } from "./types";
 
@@ -21,34 +21,21 @@ export default {
 
     // Check authentication if password is set
     if (env.GALLERY_PASSWORD) {
-      // Try to get auth from cookie first, then from query parameter
-      // Query parameter is needed for iOS Safari which doesn't send cookies with HLS requests
-      let authValue = getAuthCookie(request);
-      if (!authValue) {
-        authValue = url.searchParams.get("token") || "";
-      }
-
-      // Use shared auth library with config adapter
-      const authConfig = {
-        secret: env.AUTH_SECRET || "",
-        cacheVersion: {
-          get: async (key: string) => env.VIDEO_CACHE.get(key)
+      const { valid } = await checkAuth(
+        request,
+        url,
+        {
+          secret: env.AUTH_SECRET || "",
+          cacheVersion: {
+            get: async (key: string) => env.VIDEO_CACHE.get(key)
+          },
+          disableAuth: env.DISABLE_AUTH === "true"
         },
-        disableAuth: env.DISABLE_AUTH === "true"
-      };
-
-      // Use the same audience as the viewer worker (frontend origin)
-      // Extract from Referer header (works with Vite proxy and Pages)
-      let audience = url.origin;
-      const referer = request.headers.get("Referer");
-      if (referer) {
-        try {
-          const refererUrl = new URL(referer);
-          audience = refererUrl.origin;
-        } catch {}
-      }
-
-      const valid = await validateAuthToken(authConfig, audience, authValue);
+        {
+          // Allow token from query parameter for iOS Safari HLS requests
+          allowQueryToken: true
+        }
+      );
 
       if (!valid) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
