@@ -39,13 +39,15 @@ export default {
         });
       }
 
-      // Check authentication if password is set
-      // Note: /login is now handled by Pages Function
-      if (env.GALLERY_PASSWORD) {
+      // Helper function to check authentication
+      const checkAuth = async (): Promise<boolean> => {
+        if (!env.GALLERY_PASSWORD || env.DISABLE_AUTH === "true") {
+          return true; // No auth required
+        }
+
         const authValue = getAuthCookie(request);
 
-        // Extract audience the same way we do during login
-        // Try Origin header first, then Referer, finally fallback to url.origin
+        // Extract audience
         let audience = request.headers.get("Origin");
         if (!audience) {
           const referer = request.headers.get("Referer");
@@ -58,7 +60,7 @@ export default {
         }
         audience = audience || url.origin;
 
-        const valid = await validateAuthToken(
+        return await validateAuthToken(
           {
             secret: env.AUTH_SECRET!,
             cacheVersion: env.CACHE_VERSION,
@@ -67,10 +69,26 @@ export default {
           audience,
           authValue
         );
+      };
 
-        if (!valid) {
-          // For API requests, return 401 so client can handle redirect
-          if (url.pathname.startsWith("/api/")) {
+      // Route handling - /api/media is public but returns filtered results
+      if (url.pathname === "/api/media") {
+        const isAuthenticated = await checkAuth();
+        return handleListMedia(env, isAuthenticated);
+      }
+
+      // Check if accessing a private resource (requires auth)
+      let isPublicResource = false;
+      if (url.pathname.startsWith("/api/file/") || url.pathname.startsWith("/api/thumbnail/")) {
+        const key = decodeURIComponent(
+          url.pathname.replace("/api/file/", "").replace("/api/thumbnail/", "")
+        );
+        isPublicResource = key.startsWith("public/");
+
+        // Require auth for private resources
+        if (!isPublicResource && env.GALLERY_PASSWORD) {
+          const isAuthenticated = await checkAuth();
+          if (!isAuthenticated) {
             return new Response(JSON.stringify({ error: "Unauthorized" }), {
               status: 401,
               headers: {
@@ -78,17 +96,10 @@ export default {
               }
             });
           }
-          // For page requests, redirect to login with returnTo parameter
-          const loginUrl = new URL("/login", url.origin);
-          loginUrl.searchParams.set("returnTo", url.pathname + url.search);
-          return Response.redirect(loginUrl.toString(), 302);
         }
       }
 
-      // Route handling - media and auth only (video streaming handled by separate worker)
-      if (url.pathname === "/api/media") {
-        return handleListMedia(env);
-      } else if (url.pathname.startsWith("/api/file/")) {
+      if (url.pathname.startsWith("/api/file/")) {
         return handleGetFile(url, env, request);
       } else if (url.pathname.startsWith("/api/thumbnail/")) {
         return handleGetThumbnail(url, env, request);
@@ -99,13 +110,19 @@ export default {
   };
 
   // List all media files from D1 database using Prisma
-  async function handleListMedia(env: Env): Promise<Response> {
+  async function handleListMedia(env: Env, isAuthenticated: boolean): Promise<Response> {
     // Initialize Prisma Client with D1 adapter
     const prisma = createPrismaClient(env.DB);
 
     try {
       // Query media using Prisma
+      // If not authenticated, only return public items (key starts with "public/")
       const mediaResults = await prisma.media.findMany({
+        where: isAuthenticated ? undefined : {
+          key: {
+            startsWith: "public/"
+          }
+        },
         select: {
           key: true,
           filename: true,
@@ -182,7 +199,15 @@ export default {
 
         // Add pre-signed URLs if signing is configured
         if (signingConfig) {
-          const thumbnailKey = `thumbnails/${row.key.replace(/\.[^.]+$/, "")}_medium.jpg`;
+          let thumbnailKey: string;
+          if (row.key.startsWith("public/")) {
+            // Public item: thumbnails/public/{baseKey}_medium.jpg
+            const baseKey = row.key.substring(7).replace(/\.[^.]+$/, "");
+            thumbnailKey = `thumbnails/public/${baseKey}_medium.jpg`;
+          } else {
+            // Private item: thumbnails/medium/{key}_medium.jpg
+            thumbnailKey = `thumbnails/medium/${row.key.replace(/\.[^.]+$/, "")}_medium.jpg`;
+          }
 
           mediaItem.urls = {
             thumbnailMedium: await signR2Url(signingConfig, thumbnailKey, 1800), // 30 min
@@ -219,15 +244,24 @@ export default {
     const size = url.searchParams.get("size") || "medium";
 
     try {
-      // Map size to R2 path
-      const sizeMap: Record<string, string> = {
-        small: "thumbnails/small",
-        medium: "thumbnails/medium",
-        large: "thumbnails/large"
-      };
-
-      const prefix = sizeMap[size] || sizeMap.medium;
-      const thumbnailKey = `${prefix}/${key}`;
+      // For public items, thumbnails are in thumbnails/public/ directory
+      // For private items, thumbnails are in thumbnails/{size}/ directory
+      let thumbnailKey: string;
+      if (key.startsWith("public/")) {
+        // Public item: thumbnails/public/{baseKey}_{size}.jpg
+        const baseKey = key.substring(7); // Remove "public/" prefix
+        const baseFilename = baseKey.replace(/\.[^/.]+$/, ""); // Remove extension
+        thumbnailKey = `thumbnails/public/${baseFilename}_${size}.jpg`;
+      } else {
+        // Private item: thumbnails/{size}/{key}
+        const sizeMap: Record<string, string> = {
+          small: "thumbnails/small",
+          medium: "thumbnails/medium",
+          large: "thumbnails/large"
+        };
+        const prefix = sizeMap[size] || sizeMap.medium;
+        thumbnailKey = `${prefix}/${key}`;
+      }
 
       // Check If-None-Match for ETag validation - use HEAD request for efficiency
       const ifNoneMatch = request.headers.get("If-None-Match");

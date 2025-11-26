@@ -19,8 +19,23 @@ export default {
   async fetch(request: Request, env: VideoStreamingEnv): Promise<Response> {
     const url = new URL(request.url);
 
-    // Check authentication if password is set
-    if (env.GALLERY_PASSWORD) {
+    // Check if this is a public video resource (bypass auth)
+    let isPublicResource = false;
+    if (url.pathname === "/api/hls/playlist") {
+      const videoKey = url.searchParams.get("key") || "";
+      isPublicResource = videoKey.startsWith("public/");
+    } else if (url.pathname.startsWith("/api/hls/") || url.pathname.startsWith("/api/hls-segment/")) {
+      // Extract video key from path: /api/hls/{videoKey}/{filename}
+      const pathWithoutPrefix = url.pathname.replace("/api/hls/", "").replace("/api/hls-segment/", "");
+      const pathParts = pathWithoutPrefix.split("/");
+      if (pathParts.length >= 1) {
+        const videoKey = decodeURIComponent(pathParts[0]);
+        isPublicResource = videoKey.startsWith("public/");
+      }
+    }
+
+    // Check authentication if password is set and not accessing public resource
+    if (env.GALLERY_PASSWORD && !isPublicResource) {
       // Try to get auth from cookie first, then from query parameter
       // Query parameter is needed for iOS Safari which doesn't send cookies with HLS requests
       let authValue = getAuthCookie(request);
