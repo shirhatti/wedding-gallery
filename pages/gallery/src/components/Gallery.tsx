@@ -12,16 +12,16 @@ import { LAYOUT_BREAKPOINTS, THUMBNAIL_SIZES } from '@/lib/constants'
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
 interface GalleryProps {
+  scope: 'public' | 'private'
   filterBy?: 'image' | 'video'
   initialKey?: string // Key of media item to open in lightbox on load
 }
 
-export function Gallery({ filterBy, initialKey }: GalleryProps) {
+export function Gallery({ scope, filterBy, initialKey }: GalleryProps) {
   const [media, setMedia] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   // Filter media based on the type prop
   const filteredMedia = useMemo(() => {
@@ -58,21 +58,28 @@ export function Gallery({ filterBy, initialKey }: GalleryProps) {
 
   async function loadMedia() {
     try {
-      const response = await fetch(`${API_BASE}/api/media`, {
+      const url = scope === 'public'
+        ? `${API_BASE}/api/media?scope=public`
+        : `${API_BASE}/api/media`
+
+      const response = await fetch(url, {
         credentials: 'include',
       })
 
       if (!response.ok) {
+        if (response.status === 401 && scope === 'private') {
+          // Redirect to login for private routes
+          const returnTo = encodeURIComponent(
+            window.location.pathname + window.location.search
+          )
+          window.location.href = `/login?returnTo=${returnTo}`
+          return
+        }
         throw new Error('Failed to load media')
       }
 
       const data = await response.json()
       setMedia(data.media || [])
-
-      // Check if user is authenticated by looking at the data
-      // If all items start with "public/", user is not authenticated
-      const hasPrivateItems = (data.media || []).some((item: MediaItem) => !item.key.startsWith('public/'))
-      setIsAuthenticated(hasPrivateItems)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load media')
     } finally {
@@ -150,7 +157,7 @@ export function Gallery({ filterBy, initialKey }: GalleryProps) {
     <>
       <div className="min-h-screen bg-zinc-900 pb-8 pt-4 md:pt-8">
         {/* Header */}
-        <GalleryHeader isAuthenticated={isAuthenticated} />
+        <GalleryHeader scope={scope} />
 
         {/* Navigation - only show when filter is applied */}
         {filterBy && <Navigation />}

@@ -39,49 +39,56 @@ export default {
         });
       }
 
-      // Helper function to check authentication
-      // Returns true if user has a valid auth token, false otherwise
-      // Note: DISABLE_AUTH affects enforcement, not detection
-      const checkAuth = async (): Promise<boolean> => {
-        if (!env.GALLERY_PASSWORD) {
-          return true; // No auth system configured, treat as authenticated
+      // Route handling - /api/media
+      if (url.pathname === "/api/media") {
+        const scope = url.searchParams.get("scope");
+
+        // Public scope: return only public items, no auth required
+        if (scope === "public") {
+          return handleListMedia(env, false); // false = not authenticated, return public only
         }
 
-        const authValue = getAuthCookie(request);
+        // Private scope (default): require authentication
+        if (env.GALLERY_PASSWORD && env.DISABLE_AUTH !== "true") {
+          const authValue = getAuthCookie(request);
 
-        // Extract audience
-        let audience = request.headers.get("Origin");
-        if (!audience) {
-          const referer = request.headers.get("Referer");
-          if (referer) {
-            try {
-              const refererUrl = new URL(referer);
-              audience = refererUrl.origin;
-            } catch {}
+          // Extract audience
+          let audience = request.headers.get("Origin");
+          if (!audience) {
+            const referer = request.headers.get("Referer");
+            if (referer) {
+              try {
+                const refererUrl = new URL(referer);
+                audience = refererUrl.origin;
+              } catch {}
+            }
+          }
+          audience = audience || url.origin;
+
+          const valid = await validateAuthToken(
+            {
+              secret: env.AUTH_SECRET!,
+              cacheVersion: env.CACHE_VERSION,
+              disableAuth: env.DISABLE_AUTH === "true"
+            },
+            audience,
+            authValue
+          );
+
+          if (!valid) {
+            return new Response(JSON.stringify({ error: "Unauthorized" }), {
+              status: 401,
+              headers: {
+                "Content-Type": "application/json",
+              }
+            });
           }
         }
-        audience = audience || url.origin;
 
-        // Always validate the token to determine authentication status
-        // DISABLE_AUTH only affects whether we enforce it, not whether we detect it
-        return await validateAuthToken(
-          {
-            secret: env.AUTH_SECRET!,
-            cacheVersion: env.CACHE_VERSION,
-            disableAuth: false // Always validate properly
-          },
-          audience,
-          authValue
-        );
-      };
-
-      // Route handling - /api/media is public but returns filtered results
-      if (url.pathname === "/api/media") {
-        const isAuthenticated = await checkAuth();
-        return handleListMedia(env, isAuthenticated);
+        return handleListMedia(env, true); // true = authenticated, return all items
       }
 
-      // Check if accessing a private resource (requires auth unless DISABLE_AUTH is set)
+      // Check if accessing a private resource (requires auth unless public or DISABLE_AUTH is set)
       let isPublicResource = false;
       if (url.pathname.startsWith("/api/file/") || url.pathname.startsWith("/api/thumbnail/")) {
         const key = decodeURIComponent(
@@ -91,8 +98,32 @@ export default {
 
         // Require auth for private resources (unless auth is disabled for dev)
         if (!isPublicResource && env.GALLERY_PASSWORD && env.DISABLE_AUTH !== "true") {
-          const isAuthenticated = await checkAuth();
-          if (!isAuthenticated) {
+          const authValue = getAuthCookie(request);
+
+          // Extract audience
+          let audience = request.headers.get("Origin");
+          if (!audience) {
+            const referer = request.headers.get("Referer");
+            if (referer) {
+              try {
+                const refererUrl = new URL(referer);
+                audience = refererUrl.origin;
+              } catch {}
+            }
+          }
+          audience = audience || url.origin;
+
+          const valid = await validateAuthToken(
+            {
+              secret: env.AUTH_SECRET!,
+              cacheVersion: env.CACHE_VERSION,
+              disableAuth: env.DISABLE_AUTH === "true"
+            },
+            audience,
+            authValue
+          );
+
+          if (!valid) {
             return new Response(JSON.stringify({ error: "Unauthorized" }), {
               status: 401,
               headers: {

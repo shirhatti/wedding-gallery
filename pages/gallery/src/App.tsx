@@ -8,11 +8,21 @@ function App() {
     <div className="dark">
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Gallery />} />
-          <Route path="/images" element={<Gallery filterBy="image" />} />
-          <Route path="/videos" element={<Gallery filterBy="video" />} />
+          {/* Public routes */}
+          <Route path="/" element={<Gallery scope="public" />} />
+          <Route path="/images" element={<Gallery scope="public" filterBy="image" />} />
+          <Route path="/videos" element={<Gallery scope="public" filterBy="video" />} />
+
+          {/* Private routes */}
+          <Route path="/private" element={<Gallery scope="private" />} />
+          <Route path="/private/images" element={<Gallery scope="private" filterBy="image" />} />
+          <Route path="/private/videos" element={<Gallery scope="private" filterBy="video" />} />
+
+          {/* Deep links */}
           <Route path="/image/:key" element={<DeepLink type="image" />} />
           <Route path="/video/:key" element={<DeepLink type="video" />} />
+
+          {/* Auth */}
           <Route path="/login" element={<Login />} />
         </Routes>
       </BrowserRouter>
