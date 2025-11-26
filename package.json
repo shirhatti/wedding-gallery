@@ -19,8 +19,11 @@
     "deploy:all": "npm run deploy:viewer && npm run deploy:album && npm run deploy:pages",
     "test": "vitest",
     "prepare": "husky install",
-    "prisma:studio": "npx prisma studio",
-    "prisma:generate": "npx prisma generate",
+    "postinstall": "prisma generate",
+    "prisma:studio": "prisma studio",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
     "script:extract-dimensions": "node scripts/extract-all-dimensions-prisma.mjs",
     "script:generate-thumbnails": "node scripts/generate-thumbnails-from-pending-prisma.mjs"
   },
@@ -34,6 +37,8 @@
     "@cloudflare/vitest-pool-workers": "^0.9.9",
     "@cloudflare/workers-types": "^4.20251001.0",
     "@eslint/js": "^9.36.0",
+    "@prisma/adapter-d1": "^7.0.1",
+    "@prisma/client": "^7.0.1",
     "@types/better-sqlite3": "^7.6.13",
     "@typescript-eslint/eslint-plugin": "^8.45.0",
     "@typescript-eslint/parser": "^8.45.0",
@@ -44,7 +49,7 @@
     "heic-convert": "^2.1.0",
     "husky": "^8.0.0",
     "lint-staged": "^15.5.2",
-    "prisma": "^6.19.0",
+    "prisma": "^7.0.1",
     "sharp": "^0.34.4",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4",
@@ -54,9 +59,5 @@
     "*.{js,ts,tsx}": [
       "eslint --fix"
     ]
-  },
-  "dependencies": {
-    "@prisma/adapter-d1": "^6.19.0",
-    "@prisma/client": "^6.19.0"
   }
 }

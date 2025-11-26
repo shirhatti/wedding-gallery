@@ -12,10 +12,11 @@ import { LAYOUT_BREAKPOINTS, THUMBNAIL_SIZES } from '@/lib/constants'
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
 interface GalleryProps {
+  scope: 'public' | 'private'
   filterBy?: 'image' | 'video'
 }
 
-export function Gallery({ filterBy }: GalleryProps) {
+export function Gallery({ scope, filterBy }: GalleryProps) {
   const [media, setMedia] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -26,6 +27,19 @@ export function Gallery({ filterBy }: GalleryProps) {
     if (!filterBy) return media
     return media.filter(item => item.type === filterBy)
   }, [media, filterBy])
+
+  // Open lightbox from query param (for shareable URLs)
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    const lightboxKey = url.searchParams.get('lightbox')
+
+    if (lightboxKey && filteredMedia.length > 0 && selectedIndex === null) {
+      const index = filteredMedia.findIndex(item => item.key === lightboxKey)
+      if (index !== -1) {
+        setSelectedIndex(index)
+      }
+    }
+  }, [filteredMedia, selectedIndex])
 
   // Reset selected index when filter changes to prevent out-of-bounds errors
   useEffect(() => {
@@ -41,35 +55,42 @@ export function Gallery({ filterBy }: GalleryProps) {
   }
 
   useEffect(() => {
-    loadMedia()
-  }, [])
+    async function loadMedia() {
+      setLoading(true)
+      setError(null)
 
-  async function loadMedia() {
-    try {
-      const response = await fetch(`${API_BASE}/api/media`, {
-        credentials: 'include',
-      })
+      try {
+        const url = scope === 'public'
+          ? `${API_BASE}/api/media?scope=public`
+          : `${API_BASE}/api/media`
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          // Redirect to login page with returnTo parameter (pathname only, not full URL)
-          const returnTo = encodeURIComponent(
-            window.location.pathname + window.location.search
-          )
-          window.location.href = `/login?returnTo=${returnTo}`
-          return
+        const response = await fetch(url, {
+          credentials: 'include',
+        })
+
+        if (!response.ok) {
+          if (response.status === 401 && scope === 'private') {
+            // Redirect to login for private routes
+            const returnTo = encodeURIComponent(
+              window.location.pathname + window.location.search
+            )
+            window.location.href = `/login?returnTo=${returnTo}`
+            return
+          }
+          throw new Error('Failed to load media')
         }
-        throw new Error('Failed to load media')
-      }
 
-      const data = await response.json()
-      setMedia(data.media || [])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load media')
-    } finally {
-      setLoading(false)
+        const data = await response.json()
+        setMedia(data.media || [])
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load media')
+      } finally {
+        setLoading(false)
+      }
     }
-  }
+
+    loadMedia()
+  }, [scope]) // Re-fetch when scope changes
 
   // Helper to get thumbnail URL - supports both pre-signed URLs and proxy mode
   // Note: Pre-signed URLs (item.urls) are only generated for 'medium' size thumbnails
@@ -92,6 +113,21 @@ export function Gallery({ filterBy }: GalleryProps) {
       `${getThumbnailUrl(item, 'medium')} 400w`,
       `${getThumbnailUrl(item, 'large')} 800w`,
     ].join(', ')
+  }
+
+  // Handle opening an item in the lightbox
+  const handleItemClick = (item: MediaItem, index: number) => {
+    setSelectedIndex(index)
+  }
+
+  // Handle closing the lightbox
+  const handleCloseLightbox = () => {
+    setSelectedIndex(null)
+
+    // Remove lightbox query param from URL
+    const url = new URL(window.location.href)
+    url.searchParams.delete('lightbox')
+    window.history.replaceState(null, '', url.toString())
   }
 
   if (loading) {
@@ -129,7 +165,7 @@ export function Gallery({ filterBy }: GalleryProps) {
   if (noMediaMessage) {
     return (
       <div className="min-h-screen bg-zinc-900">
-        <GalleryHeader />
+        <GalleryHeader scope={scope} />
         <div className="flex items-center justify-center pt-20">
           <p className="text-xl text-zinc-400">{noMediaMessage}</p>
         </div>
@@ -141,10 +177,10 @@ export function Gallery({ filterBy }: GalleryProps) {
     <>
       <div className="min-h-screen bg-zinc-900 pb-8 pt-4 md:pt-8">
         {/* Header */}
-        <GalleryHeader />
+        <GalleryHeader scope={scope} />
 
-        {/* Navigation - only show when filter is applied */}
-        {filterBy && <Navigation />}
+        {/* Navigation */}
+        <Navigation scope={scope} />
 
         {/* Gallery Grid - Masonry Layout */}
         <div className="mx-auto max-w-[1600px] px-2 md:px-6">
@@ -156,7 +192,7 @@ export function Gallery({ filterBy }: GalleryProps) {
             {filteredMedia.map((item, index) => (
               <button
                 key={item.key}
-                onClick={() => setSelectedIndex(index)}
+                onClick={() => handleItemClick(item, index)}
                 className={cn(
                   "group relative mb-4 overflow-hidden rounded-lg shadow-lg w-full",
                   "transition-all duration-300 hover:shadow-2xl hover:shadow-zinc-950/50 hover:-translate-y-1",
@@ -200,7 +236,7 @@ export function Gallery({ filterBy }: GalleryProps) {
         <Lightbox
           media={filteredMedia}
           initialIndex={selectedIndex}
-          onClose={() => setSelectedIndex(null)}
+          onClose={handleCloseLightbox}
         />
       )}
     </>

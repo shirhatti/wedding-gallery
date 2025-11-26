@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import worker from '../src/index';
 
 describe('Auth and Range handling', () => {
-  it('auth flow: redirects to login when no cookie present', async () => {
+  it('auth flow: viewer worker returns 404 for non-API routes (Pages handles auth)', async () => {
     const env = {
       R2_BUCKET: {} as any,
       DB: {} as any,
@@ -11,11 +11,10 @@ describe('Auth and Range handling', () => {
       AUTH_SECRET: 'super-secret',
     } as any;
 
-    // no cookie -> redirect to /login with returnTo parameter
-    // Note: /login is now handled by Pages Function, not viewer worker
+    // Viewer worker only handles /api/* routes
+    // Root path and auth flow are handled by Pages Functions
     const res = await worker.fetch(new Request('https://example.com/'), env);
-    expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toBe('https://example.com/login?returnTo=%2F');
+    expect(res.status).toBe(404);
   });
 
   it('range request: returns 206 with proper headers', async () => {
@@ -33,6 +32,7 @@ describe('Auth and Range handling', () => {
       },
       DB: {} as any,
       CACHE_VERSION: { get: async () => '1' } as any,
+      DISABLE_AUTH: 'true',
     } as any;
 
     const req = new Request('https://example.com/api/file/example.mp4', {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import {
   MediaPlayer,
@@ -36,6 +36,17 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [authToken, setAuthToken] = useState<string | null>(null)
   const [imageError, setImageError] = useState(false)
+  const savedScrollY = useRef(0)
+
+  // Update URL to include lightbox query param for sharing
+  useEffect(() => {
+    const currentItem = media[currentIndex]
+    if (currentItem) {
+      const url = new URL(window.location.href)
+      url.searchParams.set('lightbox', currentItem.key)
+      window.history.replaceState(null, '', url.toString())
+    }
+  }, [currentIndex, media])
 
   // Track mobile viewport state and update on resize/rotation
   const [isMobile, setIsMobile] = useState(() =>
@@ -115,31 +126,49 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
     return sources.join(', ')
   }
 
+  const changeItem = (direction: number) => {
+    setCurrentIndex((prev) => (prev + direction + media.length) % media.length)
+  }
+
+  // Save and restore scroll position on mount/unmount
+  useEffect(() => {
+    // Save scroll position and prevent scrolling
+    savedScrollY.current = window.scrollY
+    document.body.style.overflow = 'hidden'
+    document.body.style.position = 'fixed'
+    document.body.style.top = `-${savedScrollY.current}px`
+    document.body.style.width = '100%'
+
+    return () => {
+      // Restore scroll position
+      document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.top = ''
+      document.body.style.width = ''
+      window.scrollTo(0, savedScrollY.current)
+    }
+  }, [])
+
+  // Handle keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose()
       } else if (e.key === 'ArrowLeft') {
-        navigate(-1)
+        changeItem(-1)
       } else if (e.key === 'ArrowRight') {
-        navigate(1)
+        changeItem(1)
       }
     }
 
     if (!isMobile) {
       document.addEventListener('keydown', handleKeyDown)
     }
-    document.body.style.overflow = 'hidden'
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = ''
     }
   }, [currentIndex, isMobile])
-
-  const navigate = (direction: number) => {
-    setCurrentIndex((prev) => (prev + direction + media.length) % media.length)
-  }
 
   // Generate video source - prefer HLS if available, fallback to direct MP4
   const getVideoSource = (item: MediaItem): string => {
@@ -168,7 +197,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
       {!isMobile && media.length > 1 && (
         <>
           <Button
-            onClick={() => navigate(-1)}
+            onClick={() => changeItem(-1)}
             variant="ghost"
             size="icon"
             className="absolute left-4 top-1/2 z-50 h-16 w-16 -translate-y-1/2 rounded-none bg-white/10 text-white hover:bg-white/20 hover:text-white"
@@ -176,7 +205,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
             <ChevronLeft className="h-8 w-8" />
           </Button>
           <Button
-            onClick={() => navigate(1)}
+            onClick={() => changeItem(1)}
             variant="ghost"
             size="icon"
             className="absolute right-4 top-1/2 z-50 h-16 w-16 -translate-y-1/2 rounded-none bg-white/10 text-white hover:bg-white/20 hover:text-white"
@@ -195,10 +224,14 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
       <div className="relative flex h-full w-full items-center justify-center p-4">
         {isVideo ? (
           <MediaPlayer
-            src={getVideoSource(currentItem)}
+            key={currentItem.key}
+            src={{
+              src: getVideoSource(currentItem),
+              type: 'application/x-mpegurl'
+            }}
             playsInline
             streamType="on-demand"
-            className="max-h-[90vh] max-w-full"
+            className="max-h-[90vh] max-w-[90vw]"
             onProviderChange={(provider) => {
               // Configure hls.js to use ExtendedHls class for AirPlay support
               if (isHLSProvider(provider)) {

@@ -13,50 +13,88 @@ import {
 } from "@wedding-gallery/shared-video-lib";
 import { validateAuthToken, getAuthCookie } from "@wedding-gallery/auth";
 import { sanitizeVideoKey, sanitizeFilename } from "./lib/security";
+import { createPrismaClient } from "./lib/prisma";
 import type { VideoStreamingEnv } from "./types";
 
 export default {
   async fetch(request: Request, env: VideoStreamingEnv): Promise<Response> {
     const url = new URL(request.url);
 
-    // Check authentication if password is set
-    if (env.GALLERY_PASSWORD) {
-      // Try to get auth from cookie first, then from query parameter
-      // Query parameter is needed for iOS Safari which doesn't send cookies with HLS requests
-      let authValue = getAuthCookie(request);
-      if (!authValue) {
-        authValue = url.searchParams.get("token") || "";
+    // Check authentication for private resources unless explicitly disabled
+    // Skip auth check entirely if DISABLE_AUTH is set
+    if (env.DISABLE_AUTH !== "true") {
+      // Extract video key from request
+      let videoKey = "";
+      if (url.pathname === "/api/hls/playlist") {
+        videoKey = url.searchParams.get("key") || "";
+      } else if (url.pathname.startsWith("/api/hls/") || url.pathname.startsWith("/api/hls-segment/")) {
+        // Extract video key from path: /api/hls/{videoKey}/{filename}
+        const pathWithoutPrefix = url.pathname.replace("/api/hls/", "").replace("/api/hls-segment/", "");
+        const pathParts = pathWithoutPrefix.split("/");
+        if (pathParts.length >= 1) {
+          videoKey = decodeURIComponent(pathParts[0]);
+        }
       }
 
-      // Use shared auth library with config adapter
-      const authConfig = {
-        secret: env.AUTH_SECRET || "",
-        cacheVersion: {
-          get: async (key: string) => env.VIDEO_CACHE.get(key)
-        },
-        disableAuth: env.DISABLE_AUTH === "true"
-      };
-
-      // Use the same audience as the viewer worker (frontend origin)
-      // Extract from Referer header (works with Vite proxy and Pages)
-      let audience = url.origin;
-      const referer = request.headers.get("Referer");
-      if (referer) {
+      // Query database to check if video is public
+      // TODO: Optimize - this queries DB on every request. Consider caching is_public flag in KV.
+      let isPublicResource = false;
+      if (videoKey) {
+        const prisma = createPrismaClient(env.DB);
         try {
-          const refererUrl = new URL(referer);
-          audience = refererUrl.origin;
-        } catch {}
+          const media = await prisma.media.findUnique({
+            where: { key: videoKey },
+            select: { isPublic: true }
+          });
+          isPublicResource = media?.isPublic === true;
+        } finally {
+          await prisma.$disconnect();
+        }
       }
 
-      const valid = await validateAuthToken(authConfig, audience, authValue);
+      // Require auth for private resources
+      if (!isPublicResource) {
+        if (!env.GALLERY_PASSWORD || !env.AUTH_SECRET) {
+          throw new Error("Auth is enabled but GALLERY_PASSWORD or AUTH_SECRET is not configured");
+        }
 
-      if (!valid) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: {
-            "Content-Type": "application/json",
-          }
-        });
+        // Try to get auth from cookie first, then from query parameter
+        // Query parameter is needed for iOS Safari which doesn't send cookies with HLS requests
+        let authValue = getAuthCookie(request);
+        if (!authValue) {
+          authValue = url.searchParams.get("token") || "";
+        }
+
+        // Use shared auth library with config adapter
+        const authConfig = {
+          secret: env.AUTH_SECRET,
+          cacheVersion: {
+            get: async (key: string) => env.VIDEO_CACHE.get(key)
+          },
+          disableAuth: false
+        };
+
+        // Use the same audience as the viewer worker (frontend origin)
+        // Extract from Referer header (works with Vite proxy and Pages)
+        let audience = url.origin;
+        const referer = request.headers.get("Referer");
+        if (referer) {
+          try {
+            const refererUrl = new URL(referer);
+            audience = refererUrl.origin;
+          } catch {}
+        }
+
+        const valid = await validateAuthToken(authConfig, audience, authValue);
+
+        if (!valid) {
+          return new Response(JSON.stringify({ error: "Unauthorized" }), {
+            status: 401,
+            headers: {
+              "Content-Type": "application/json",
+            }
+          });
+        }
       }
     }
 

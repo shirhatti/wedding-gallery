@@ -39,38 +39,47 @@ export default {
         });
       }
 
-      // Check authentication if password is set
-      // Note: /login is now handled by Pages Function
-      if (env.GALLERY_PASSWORD) {
-        const authValue = getAuthCookie(request);
+      // Route handling - /api/media
+      if (url.pathname === "/api/media") {
+        const scope = url.searchParams.get("scope");
 
-        // Extract audience the same way we do during login
-        // Try Origin header first, then Referer, finally fallback to url.origin
-        let audience = request.headers.get("Origin");
-        if (!audience) {
-          const referer = request.headers.get("Referer");
-          if (referer) {
-            try {
-              const refererUrl = new URL(referer);
-              audience = refererUrl.origin;
-            } catch {}
-          }
+        // Public scope: return only public items, no auth required
+        if (scope === "public") {
+          return handleListMedia(env, false); // false = not authenticated, return public only
         }
-        audience = audience || url.origin;
 
-        const valid = await validateAuthToken(
-          {
-            secret: env.AUTH_SECRET!,
-            cacheVersion: env.CACHE_VERSION,
-            disableAuth: env.DISABLE_AUTH === "true"
-          },
-          audience,
-          authValue
-        );
+        // Private scope (default): require authentication unless explicitly disabled
+        if (env.DISABLE_AUTH !== "true") {
+          if (!env.GALLERY_PASSWORD || !env.AUTH_SECRET) {
+            throw new Error("Auth is enabled but GALLERY_PASSWORD or AUTH_SECRET is not configured");
+          }
 
-        if (!valid) {
-          // For API requests, return 401 so client can handle redirect
-          if (url.pathname.startsWith("/api/")) {
+          const authValue = getAuthCookie(request);
+
+          // Extract audience
+          let audience = request.headers.get("Origin");
+          if (!audience) {
+            const referer = request.headers.get("Referer");
+            if (referer) {
+              try {
+                const refererUrl = new URL(referer);
+                audience = refererUrl.origin;
+              } catch {}
+            }
+          }
+          audience = audience || url.origin;
+
+          const valid = await validateAuthToken(
+            {
+              secret: env.AUTH_SECRET,
+              cacheVersion: env.CACHE_VERSION,
+              disableAuth: false
+            },
+            audience,
+            authValue
+          );
+
+          if (!valid) {
             return new Response(JSON.stringify({ error: "Unauthorized" }), {
               status: 401,
               headers: {
@@ -78,17 +87,75 @@ export default {
               }
             });
           }
-          // For page requests, redirect to login with returnTo parameter
-          const loginUrl = new URL("/login", url.origin);
-          loginUrl.searchParams.set("returnTo", url.pathname + url.search);
-          return Response.redirect(loginUrl.toString(), 302);
+        }
+
+        return handleListMedia(env, true); // true = authenticated, return all items
+      }
+
+      // Check if accessing a private resource (requires auth unless public or DISABLE_AUTH is set)
+      // Skip auth check entirely if DISABLE_AUTH is set
+      if (env.DISABLE_AUTH !== "true" && (url.pathname.startsWith("/api/file/") || url.pathname.startsWith("/api/thumbnail/"))) {
+        const key = decodeURIComponent(
+          url.pathname.replace("/api/file/", "").replace("/api/thumbnail/", "")
+        );
+
+        // Query database to check if resource is public
+        // TODO: Optimize - this queries DB on every request. Consider caching is_public flag in KV.
+        let isPublicResource = false;
+        const prisma = createPrismaClient(env.DB);
+        try {
+          const media = await prisma.media.findUnique({
+            where: { key },
+            select: { isPublic: true }
+          });
+          isPublicResource = media?.isPublic === true;
+        } finally {
+          await prisma.$disconnect();
+        }
+
+        // Require auth for private resources
+        if (!isPublicResource) {
+          if (!env.GALLERY_PASSWORD || !env.AUTH_SECRET) {
+            throw new Error("Auth is enabled but GALLERY_PASSWORD or AUTH_SECRET is not configured");
+          }
+
+          const authValue = getAuthCookie(request);
+
+          // Extract audience
+          let audience = request.headers.get("Origin");
+          if (!audience) {
+            const referer = request.headers.get("Referer");
+            if (referer) {
+              try {
+                const refererUrl = new URL(referer);
+                audience = refererUrl.origin;
+              } catch {}
+            }
+          }
+          audience = audience || url.origin;
+
+          const valid = await validateAuthToken(
+            {
+              secret: env.AUTH_SECRET,
+              cacheVersion: env.CACHE_VERSION,
+              disableAuth: false
+            },
+            audience,
+            authValue
+          );
+
+          if (!valid) {
+            return new Response(JSON.stringify({ error: "Unauthorized" }), {
+              status: 401,
+              headers: {
+                "Content-Type": "application/json",
+              }
+            });
+          }
         }
       }
 
-      // Route handling - media and auth only (video streaming handled by separate worker)
-      if (url.pathname === "/api/media") {
-        return handleListMedia(env);
-      } else if (url.pathname.startsWith("/api/file/")) {
+      if (url.pathname.startsWith("/api/file/")) {
         return handleGetFile(url, env, request);
       } else if (url.pathname.startsWith("/api/thumbnail/")) {
         return handleGetThumbnail(url, env, request);
@@ -99,13 +166,17 @@ export default {
   };
 
   // List all media files from D1 database using Prisma
-  async function handleListMedia(env: Env): Promise<Response> {
+  async function handleListMedia(env: Env, isAuthenticated: boolean): Promise<Response> {
     // Initialize Prisma Client with D1 adapter
     const prisma = createPrismaClient(env.DB);
 
     try {
       // Query media using Prisma
+      // If not authenticated, only return public items (isPublic = true)
       const mediaResults = await prisma.media.findMany({
+        where: isAuthenticated ? undefined : {
+          isPublic: true
+        },
         select: {
           key: true,
           filename: true,
@@ -182,7 +253,8 @@ export default {
 
         // Add pre-signed URLs if signing is configured
         if (signingConfig) {
-          const thumbnailKey = `thumbnails/${row.key.replace(/\.[^.]+$/, "")}_medium.jpg`;
+          // Thumbnails are stored in thumbnails/medium/{key}
+          const thumbnailKey = `thumbnails/medium/${row.key}`;
 
           mediaItem.urls = {
             thumbnailMedium: await signR2Url(signingConfig, thumbnailKey, 1800), // 30 min
@@ -219,13 +291,12 @@ export default {
     const size = url.searchParams.get("size") || "medium";
 
     try {
-      // Map size to R2 path
+      // Thumbnails are stored in thumbnails/{size}/{key}
       const sizeMap: Record<string, string> = {
         small: "thumbnails/small",
         medium: "thumbnails/medium",
         large: "thumbnails/large"
       };
-
       const prefix = sizeMap[size] || sizeMap.medium;
       const thumbnailKey = `${prefix}/${key}`;
 

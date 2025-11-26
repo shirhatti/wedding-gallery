@@ -1,8 +1,8 @@
 /**
- * Initialize test database with schema from Prisma migration
+ * Initialize test database with schema from Prisma migrations
  * Call this in beforeAll() hooks for E2E tests
  *
- * This SQL is copied from prisma/migrations/20251109221937_init/migration.sql
+ * This SQL is copied from prisma/migrations/
  */
 export async function setupTestDatabase(db: D1Database): Promise<void> {
   // Create media table
@@ -33,6 +33,7 @@ export async function setupTestDatabase(db: D1Database): Promise<void> {
       "thumbnail_medium" TEXT,
       "thumbnail_large" TEXT,
       "metadata" TEXT,
+      "is_public" INTEGER NOT NULL DEFAULT 0,
       "processed_at" TEXT,
       "created_at" TEXT NOT NULL,
       "updated_at" TEXT NOT NULL
