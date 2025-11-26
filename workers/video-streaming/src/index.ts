@@ -35,7 +35,8 @@ export default {
     }
 
     // Check authentication if password is set and not accessing public resource
-    if (env.GALLERY_PASSWORD && !isPublicResource) {
+    // DISABLE_AUTH allows access without enforcing auth, but we still validate tokens
+    if (env.GALLERY_PASSWORD && !isPublicResource && env.DISABLE_AUTH !== "true") {
       // Try to get auth from cookie first, then from query parameter
       // Query parameter is needed for iOS Safari which doesn't send cookies with HLS requests
       let authValue = getAuthCookie(request);
@@ -49,7 +50,7 @@ export default {
         cacheVersion: {
           get: async (key: string) => env.VIDEO_CACHE.get(key)
         },
-        disableAuth: env.DISABLE_AUTH === "true"
+        disableAuth: false // Always validate tokens properly
       };
 
       // Use the same audience as the viewer worker (frontend origin)

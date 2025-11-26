@@ -40,9 +40,11 @@ export default {
       }
 
       // Helper function to check authentication
+      // Returns true if user has a valid auth token, false otherwise
+      // Note: DISABLE_AUTH affects enforcement, not detection
       const checkAuth = async (): Promise<boolean> => {
-        if (!env.GALLERY_PASSWORD || env.DISABLE_AUTH === "true") {
-          return true; // No auth required
+        if (!env.GALLERY_PASSWORD) {
+          return true; // No auth system configured, treat as authenticated
         }
 
         const authValue = getAuthCookie(request);
@@ -60,11 +62,13 @@ export default {
         }
         audience = audience || url.origin;
 
+        // Always validate the token to determine authentication status
+        // DISABLE_AUTH only affects whether we enforce it, not whether we detect it
         return await validateAuthToken(
           {
             secret: env.AUTH_SECRET!,
             cacheVersion: env.CACHE_VERSION,
-            disableAuth: env.DISABLE_AUTH === "true"
+            disableAuth: false // Always validate properly
           },
           audience,
           authValue
@@ -77,7 +81,7 @@ export default {
         return handleListMedia(env, isAuthenticated);
       }
 
-      // Check if accessing a private resource (requires auth)
+      // Check if accessing a private resource (requires auth unless DISABLE_AUTH is set)
       let isPublicResource = false;
       if (url.pathname.startsWith("/api/file/") || url.pathname.startsWith("/api/thumbnail/")) {
         const key = decodeURIComponent(
@@ -85,8 +89,8 @@ export default {
         );
         isPublicResource = key.startsWith("public/");
 
-        // Require auth for private resources
-        if (!isPublicResource && env.GALLERY_PASSWORD) {
+        // Require auth for private resources (unless auth is disabled for dev)
+        if (!isPublicResource && env.GALLERY_PASSWORD && env.DISABLE_AUTH !== "true") {
           const isAuthenticated = await checkAuth();
           if (!isAuthenticated) {
             return new Response(JSON.stringify({ error: "Unauthorized" }), {
