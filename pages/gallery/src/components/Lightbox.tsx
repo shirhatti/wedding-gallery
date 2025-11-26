@@ -230,7 +230,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
             }}
             playsInline
             streamType="on-demand"
-            className="w-auto h-auto max-h-[90vh] max-w-[90vw]"
+            className="max-h-[90vh] max-w-[90vw]"
             onProviderChange={(provider) => {
               // Configure hls.js to use ExtendedHls class for AirPlay support
               if (isHLSProvider(provider)) {
