@@ -54,6 +54,9 @@ model Media {
   // Full EXIF metadata (JSON blob)
   metadata String?
 
+  // Public access flag
+  isPublic Boolean @default(false) @map("is_public")
+
   // Timestamps (Note: Application code explicitly sets these)
   processedAt DateTime? @map("processed_at")
   createdAt   DateTime  @map("created_at")
