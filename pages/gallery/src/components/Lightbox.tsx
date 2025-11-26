@@ -127,14 +127,18 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
     return sources.join(', ')
   }
 
+  const changeItem = (direction: number) => {
+    setCurrentIndex((prev) => (prev + direction + media.length) % media.length)
+  }
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose()
       } else if (e.key === 'ArrowLeft') {
-        navigate(-1)
+        changeItem(-1)
       } else if (e.key === 'ArrowRight') {
-        navigate(1)
+        changeItem(1)
       }
     }
 
@@ -148,10 +152,6 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
       document.body.style.overflow = ''
     }
   }, [currentIndex, isMobile])
-
-  const navigate = (direction: number) => {
-    setCurrentIndex((prev) => (prev + direction + media.length) % media.length)
-  }
 
   // Generate video source - prefer HLS if available, fallback to direct MP4
   const getVideoSource = (item: MediaItem): string => {
@@ -180,7 +180,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
       {!isMobile && media.length > 1 && (
         <>
           <Button
-            onClick={() => navigate(-1)}
+            onClick={() => changeItem(-1)}
             variant="ghost"
             size="icon"
             className="absolute left-4 top-1/2 z-50 h-16 w-16 -translate-y-1/2 rounded-none bg-white/10 text-white hover:bg-white/20 hover:text-white"
@@ -188,7 +188,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
             <ChevronLeft className="h-8 w-8" />
           </Button>
           <Button
-            onClick={() => navigate(1)}
+            onClick={() => changeItem(1)}
             variant="ghost"
             size="icon"
             className="absolute right-4 top-1/2 z-50 h-16 w-16 -translate-y-1/2 rounded-none bg-white/10 text-white hover:bg-white/20 hover:text-white"
