@@ -25,5 +25,23 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: TypeScript check - workers/viewer
+        run: npx tsc --noEmit -p workers/viewer
+
+      - name: TypeScript check - workers/video-streaming
+        run: npx tsc --noEmit -p workers/video-streaming
+
+      - name: TypeScript check - workers/album
+        run: npx tsc --noEmit -p workers/album
+
+      - name: TypeScript check - packages/auth
+        run: npx tsc --noEmit -p packages/auth
+
+      - name: TypeScript check - packages/shared-video-lib
+        run: npx tsc --noEmit -p packages/shared-video-lib
+
+      - name: Build pages/gallery
+        run: npm run build:pages
+
       - name: Run tests
         run: npm test -- --run
