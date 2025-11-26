@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Play } from 'lucide-react'
 import Masonry from 'react-masonry-css'
 import type { MediaItem } from '@/types'
@@ -18,6 +19,7 @@ interface GalleryProps {
 }
 
 export function Gallery({ scope, filterBy, initialKey }: GalleryProps) {
+  const navigate = useNavigate()
   const [media, setMedia] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -113,6 +115,26 @@ export function Gallery({ scope, filterBy, initialKey }: GalleryProps) {
     ].join(', ')
   }
 
+  // Handle opening an item in the lightbox - updates URL to deep link
+  const handleItemClick = (item: MediaItem, index: number) => {
+    const deepLinkUrl = `/${item.type}/${encodeURIComponent(item.key)}`
+    navigate(deepLinkUrl)
+  }
+
+  // Handle closing the lightbox - navigate back to gallery or close lightbox
+  const handleCloseLightbox = () => {
+    if (initialKey) {
+      // We're on a deep link route, navigate back to the appropriate gallery page
+      const galleryUrl = scope === 'public'
+        ? (filterBy ? `/${filterBy}s` : '/')
+        : (filterBy ? `/private/${filterBy}s` : '/private')
+      navigate(galleryUrl)
+    } else {
+      // We're already on a gallery route, just close the lightbox
+      setSelectedIndex(null)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-zinc-900">
@@ -175,7 +197,7 @@ export function Gallery({ scope, filterBy, initialKey }: GalleryProps) {
             {filteredMedia.map((item, index) => (
               <button
                 key={item.key}
-                onClick={() => setSelectedIndex(index)}
+                onClick={() => handleItemClick(item, index)}
                 className={cn(
                   "group relative mb-4 overflow-hidden rounded-lg shadow-lg w-full",
                   "transition-all duration-300 hover:shadow-2xl hover:shadow-zinc-950/50 hover:-translate-y-1",
@@ -219,7 +241,7 @@ export function Gallery({ scope, filterBy, initialKey }: GalleryProps) {
         <Lightbox
           media={filteredMedia}
           initialIndex={selectedIndex}
-          onClose={() => setSelectedIndex(null)}
+          onClose={handleCloseLightbox}
         />
       )}
     </>
