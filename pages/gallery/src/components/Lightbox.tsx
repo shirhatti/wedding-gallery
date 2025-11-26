@@ -223,6 +223,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
       <div className="relative flex h-full w-full items-center justify-center p-4">
         {isVideo ? (
           <MediaPlayer
+            key={currentItem.key}
             src={getVideoSource(currentItem)}
             playsInline
             streamType="on-demand"
