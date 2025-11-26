@@ -37,12 +37,13 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
   const [authToken, setAuthToken] = useState<string | null>(null)
   const [imageError, setImageError] = useState(false)
 
-  // Update URL to reflect current item in lightbox without triggering React Router
+  // Update URL to include lightbox query param for sharing
   useEffect(() => {
     const currentItem = media[currentIndex]
     if (currentItem) {
-      const deepLinkUrl = `/${currentItem.type}/${encodeURIComponent(currentItem.key)}`
-      window.history.replaceState(null, '', deepLinkUrl)
+      const url = new URL(window.location.href)
+      url.searchParams.set('lightbox', currentItem.key)
+      window.history.replaceState(null, '', url.toString())
     }
   }, [currentIndex, media])
 

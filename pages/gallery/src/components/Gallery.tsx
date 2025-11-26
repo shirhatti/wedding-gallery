@@ -39,6 +39,19 @@ export function Gallery({ scope, filterBy, initialKey }: GalleryProps) {
     }
   }, [initialKey, filteredMedia, selectedIndex])
 
+  // Open lightbox from query param (for shareable URLs)
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    const lightboxKey = url.searchParams.get('lightbox')
+
+    if (lightboxKey && filteredMedia.length > 0 && selectedIndex === null && !initialKey) {
+      const index = filteredMedia.findIndex(item => item.key === lightboxKey)
+      if (index !== -1) {
+        setSelectedIndex(index)
+      }
+    }
+  }, [filteredMedia, selectedIndex, initialKey])
+
   // Reset selected index when filter changes to prevent out-of-bounds errors
   useEffect(() => {
     setSelectedIndex(null)
@@ -122,14 +135,10 @@ export function Gallery({ scope, filterBy, initialKey }: GalleryProps) {
   const handleCloseLightbox = () => {
     setSelectedIndex(null)
 
-    // Restore gallery URL without triggering React Router navigation
-    // This prevents unnecessary re-renders of the Gallery component
-    const galleryUrl = scope === 'public'
-      ? (filterBy ? `/${filterBy}s` : '/')
-      : (filterBy ? `/private/${filterBy}s` : '/private')
-
-    // Use History API directly to avoid re-render
-    window.history.replaceState(null, '', galleryUrl)
+    // Remove lightbox query param from URL
+    const url = new URL(window.location.href)
+    url.searchParams.delete('lightbox')
+    window.history.replaceState(null, '', url.toString())
   }
 
   if (loading) {
