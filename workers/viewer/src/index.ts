@@ -93,15 +93,28 @@ export default {
       }
 
       // Check if accessing a private resource (requires auth unless public or DISABLE_AUTH is set)
-      let isPublicResource = false;
-      if (url.pathname.startsWith("/api/file/") || url.pathname.startsWith("/api/thumbnail/")) {
+      // Skip auth check entirely if DISABLE_AUTH is set
+      if (env.DISABLE_AUTH !== "true" && (url.pathname.startsWith("/api/file/") || url.pathname.startsWith("/api/thumbnail/"))) {
         const key = decodeURIComponent(
           url.pathname.replace("/api/file/", "").replace("/api/thumbnail/", "")
         );
-        isPublicResource = key.startsWith("public/");
 
-        // Require auth for private resources unless explicitly disabled
-        if (!isPublicResource && env.DISABLE_AUTH !== "true") {
+        // Query database to check if resource is public
+        // TODO: Optimize - this queries DB on every request. Consider caching is_public flag in KV.
+        let isPublicResource = false;
+        const prisma = createPrismaClient(env.DB);
+        try {
+          const media = await prisma.media.findUnique({
+            where: { key },
+            select: { isPublic: true }
+          });
+          isPublicResource = media?.isPublic === true;
+        } finally {
+          await prisma.$disconnect();
+        }
+
+        // Require auth for private resources
+        if (!isPublicResource) {
           if (!env.GALLERY_PASSWORD || !env.AUTH_SECRET) {
             throw new Error("Auth is enabled but GALLERY_PASSWORD or AUTH_SECRET is not configured");
           }
@@ -159,12 +172,10 @@ export default {
 
     try {
       // Query media using Prisma
-      // If not authenticated, only return public items (key starts with "public/")
+      // If not authenticated, only return public items (isPublic = true)
       const mediaResults = await prisma.media.findMany({
         where: isAuthenticated ? undefined : {
-          key: {
-            startsWith: "public/"
-          }
+          isPublic: true
         },
         select: {
           key: true,
@@ -242,15 +253,8 @@ export default {
 
         // Add pre-signed URLs if signing is configured
         if (signingConfig) {
-          let thumbnailKey: string;
-          if (row.key.startsWith("public/")) {
-            // Public item: thumbnails/public/{baseKey}_medium.jpg
-            const baseKey = row.key.substring(7).replace(/\.[^.]+$/, "");
-            thumbnailKey = `thumbnails/public/${baseKey}_medium.jpg`;
-          } else {
-            // Private item: thumbnails/medium/{key}_medium.jpg
-            thumbnailKey = `thumbnails/medium/${row.key.replace(/\.[^.]+$/, "")}_medium.jpg`;
-          }
+          // Thumbnails are stored in thumbnails/medium/{key}
+          const thumbnailKey = `thumbnails/medium/${row.key}`;
 
           mediaItem.urls = {
             thumbnailMedium: await signR2Url(signingConfig, thumbnailKey, 1800), // 30 min
@@ -287,24 +291,14 @@ export default {
     const size = url.searchParams.get("size") || "medium";
 
     try {
-      // For public items, thumbnails are in thumbnails/public/ directory
-      // For private items, thumbnails are in thumbnails/{size}/ directory
-      let thumbnailKey: string;
-      if (key.startsWith("public/")) {
-        // Public item: thumbnails/public/{baseKey}_{size}.jpg
-        const baseKey = key.substring(7); // Remove "public/" prefix
-        const baseFilename = baseKey.replace(/\.[^/.]+$/, ""); // Remove extension
-        thumbnailKey = `thumbnails/public/${baseFilename}_${size}.jpg`;
-      } else {
-        // Private item: thumbnails/{size}/{key}
-        const sizeMap: Record<string, string> = {
-          small: "thumbnails/small",
-          medium: "thumbnails/medium",
-          large: "thumbnails/large"
-        };
-        const prefix = sizeMap[size] || sizeMap.medium;
-        thumbnailKey = `${prefix}/${key}`;
-      }
+      // Thumbnails are stored in thumbnails/{size}/{key}
+      const sizeMap: Record<string, string> = {
+        small: "thumbnails/small",
+        medium: "thumbnails/medium",
+        large: "thumbnails/large"
+      };
+      const prefix = sizeMap[size] || sizeMap.medium;
+      const thumbnailKey = `${prefix}/${key}`;
 
       // Check If-None-Match for ETag validation - use HEAD request for efficiency
       const ifNoneMatch = request.headers.get("If-None-Match");
