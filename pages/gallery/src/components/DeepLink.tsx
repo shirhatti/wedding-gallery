@@ -6,8 +6,11 @@ interface DeepLinkProps {
 }
 
 export function DeepLink({ type }: DeepLinkProps) {
-  const { key } = useParams<{ key: string }>()
+  const params = useParams()
   const navigate = useNavigate()
+
+  // Extract the key from the wildcard parameter (*)
+  const key = params['*']
 
   // Use useLayoutEffect to redirect before browser paint, eliminating flash
   useLayoutEffect(() => {

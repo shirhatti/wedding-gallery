@@ -18,9 +18,9 @@ function App() {
           <Route path="/private/images" element={<Gallery scope="private" filterBy="image" />} />
           <Route path="/private/videos" element={<Gallery scope="private" filterBy="video" />} />
 
-          {/* Deep links */}
-          <Route path="/image/:key" element={<DeepLink type="image" />} />
-          <Route path="/video/:key" element={<DeepLink type="video" />} />
+          {/* Deep links - using wildcard to support keys with slashes */}
+          <Route path="/image/*" element={<DeepLink type="image" />} />
+          <Route path="/video/*" element={<DeepLink type="video" />} />
 
           {/* Auth */}
           <Route path="/login" element={<Login />} />
