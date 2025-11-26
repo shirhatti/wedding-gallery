@@ -17,7 +17,6 @@ import {
   getAuthTokenUrl,
   getHLSPlaylistUrl,
   getOriginalUrl,
-  getThumbnailUrl,
   getLightboxSrcset
 } from '@/lib/mediaUrlResolver'
 
