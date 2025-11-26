@@ -19,6 +19,7 @@
     "deploy:all": "npm run deploy:viewer && npm run deploy:album && npm run deploy:pages",
     "test": "vitest",
     "prepare": "husky install",
+    "postinstall": "prisma generate",
     "prisma:studio": "prisma studio",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
