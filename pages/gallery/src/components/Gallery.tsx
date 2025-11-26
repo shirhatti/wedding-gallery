@@ -13,19 +13,31 @@ const API_BASE = import.meta.env.VITE_API_BASE || ''
 
 interface GalleryProps {
   filterBy?: 'image' | 'video'
+  initialKey?: string // Key of media item to open in lightbox on load
 }
 
-export function Gallery({ filterBy }: GalleryProps) {
+export function Gallery({ filterBy, initialKey }: GalleryProps) {
   const [media, setMedia] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   // Filter media based on the type prop
   const filteredMedia = useMemo(() => {
     if (!filterBy) return media
     return media.filter(item => item.type === filterBy)
   }, [media, filterBy])
+
+  // Open lightbox for deep linked item when media loads
+  useEffect(() => {
+    if (initialKey && filteredMedia.length > 0 && selectedIndex === null) {
+      const index = filteredMedia.findIndex(item => item.key === initialKey)
+      if (index !== -1) {
+        setSelectedIndex(index)
+      }
+    }
+  }, [initialKey, filteredMedia, selectedIndex])
 
   // Reset selected index when filter changes to prevent out-of-bounds errors
   useEffect(() => {
@@ -51,19 +63,16 @@ export function Gallery({ filterBy }: GalleryProps) {
       })
 
       if (!response.ok) {
-        if (response.status === 401) {
-          // Redirect to login page with returnTo parameter (pathname only, not full URL)
-          const returnTo = encodeURIComponent(
-            window.location.pathname + window.location.search
-          )
-          window.location.href = `/login?returnTo=${returnTo}`
-          return
-        }
         throw new Error('Failed to load media')
       }
 
       const data = await response.json()
       setMedia(data.media || [])
+
+      // Check if user is authenticated by looking at the data
+      // If all items start with "public/", user is not authenticated
+      const hasPrivateItems = (data.media || []).some((item: MediaItem) => !item.key.startsWith('public/'))
+      setIsAuthenticated(hasPrivateItems)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load media')
     } finally {
@@ -141,7 +150,7 @@ export function Gallery({ filterBy }: GalleryProps) {
     <>
       <div className="min-h-screen bg-zinc-900 pb-8 pt-4 md:pt-8">
         {/* Header */}
-        <GalleryHeader />
+        <GalleryHeader isAuthenticated={isAuthenticated} />
 
         {/* Navigation - only show when filter is applied */}
         {filterBy && <Navigation />}
