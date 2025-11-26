@@ -184,8 +184,8 @@ export function Gallery({ scope, filterBy, initialKey }: GalleryProps) {
         {/* Header */}
         <GalleryHeader scope={scope} />
 
-        {/* Navigation - only show when filter is applied */}
-        {filterBy && <Navigation />}
+        {/* Navigation */}
+        <Navigation scope={scope} />
 
         {/* Gallery Grid - Masonry Layout */}
         <div className="mx-auto max-w-[1600px] px-2 md:px-6">
