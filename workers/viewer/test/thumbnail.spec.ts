@@ -8,6 +8,7 @@ describe('Thumbnail API', () => {
         head: async () => null,
       },
       DB: {} as D1Database,
+      DISABLE_AUTH: 'true',
     };
 
     const request = new Request('https://example.com/api/thumbnail/nonexistent.jpg');
@@ -25,6 +26,7 @@ describe('Thumbnail API', () => {
         }),
       },
       DB: {} as D1Database,
+      DISABLE_AUTH: 'true',
     };
 
     const request = new Request('https://example.com/api/thumbnail/test.jpg', {
@@ -56,6 +58,7 @@ describe('Thumbnail API', () => {
         }),
       },
       DB: {} as D1Database,
+      DISABLE_AUTH: 'true',
     };
 
     const request = new Request('https://example.com/api/thumbnail/test.jpg?size=medium');
@@ -85,6 +88,7 @@ describe('Thumbnail API', () => {
         }),
       },
       DB: {} as D1Database,
+      DISABLE_AUTH: 'true',
     };
 
     const request = new Request('https://example.com/api/thumbnail/test.jpg', {
@@ -126,6 +130,7 @@ describe('Thumbnail API', () => {
         get: getSpy,
       },
       DB: {} as D1Database,
+      DISABLE_AUTH: 'true',
     };
 
     const request = new Request('https://example.com/api/thumbnail/test.jpg?size=small');
