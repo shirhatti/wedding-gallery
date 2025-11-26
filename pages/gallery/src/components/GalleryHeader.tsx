@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
-import { LogIn, Home } from 'lucide-react'
+import { Globe, Lock } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface GalleryHeaderProps {
   scope: 'public' | 'private'
@@ -14,23 +15,33 @@ export function GalleryHeader({ scope }: GalleryHeaderProps) {
           alt="Wedding Logo"
           className="h-10 w-auto md:h-15"
         />
-        {scope === 'public' ? (
-          <Link
-            to="/login"
-            className="absolute right-0 flex items-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-100"
-          >
-            <LogIn className="h-4 w-4" />
-            <span className="hidden sm:inline">Sign In</span>
-          </Link>
-        ) : (
+        {/* Toggle Switch */}
+        <div className="absolute right-0 inline-flex rounded-lg bg-zinc-800 p-1">
           <Link
             to="/"
-            className="absolute right-0 flex items-center gap-2 rounded-md bg-zinc-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
+            className={cn(
+              'flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-all',
+              scope === 'public'
+                ? 'bg-white text-zinc-900 shadow-sm'
+                : 'text-zinc-400 hover:text-white'
+            )}
           >
-            <Home className="h-4 w-4" />
-            <span className="hidden sm:inline">Public Gallery</span>
+            <Globe className="h-4 w-4" />
+            <span className="hidden sm:inline">Public</span>
           </Link>
-        )}
+          <Link
+            to="/private"
+            className={cn(
+              'flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-all',
+              scope === 'private'
+                ? 'bg-white text-zinc-900 shadow-sm'
+                : 'text-zinc-400 hover:text-white'
+            )}
+          >
+            <Lock className="h-4 w-4" />
+            <span className="hidden sm:inline">Private</span>
+          </Link>
+        </div>
       </div>
     </div>
   )
