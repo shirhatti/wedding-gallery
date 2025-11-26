@@ -39,15 +39,14 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
   const [authToken, setAuthToken] = useState<string | null>(null)
   const [imageError, setImageError] = useState(false)
 
-  // Update URL when navigating between items in the lightbox
+  // Update URL to reflect current item in lightbox
   useEffect(() => {
-    // Skip URL update for the initial render to avoid unnecessary navigation
-    if (currentIndex !== initialIndex) {
-      const currentItem = media[currentIndex]
+    const currentItem = media[currentIndex]
+    if (currentItem) {
       const deepLinkUrl = `/${currentItem.type}/${encodeURIComponent(currentItem.key)}`
       navigate(deepLinkUrl, { replace: true })
     }
-  }, [currentIndex, media, navigate, initialIndex])
+  }, [currentIndex, media, navigate])
 
   // Track mobile viewport state and update on resize/rotation
   const [isMobile, setIsMobile] = useState(() =>

@@ -115,24 +115,23 @@ export function Gallery({ scope, filterBy, initialKey }: GalleryProps) {
     ].join(', ')
   }
 
-  // Handle opening an item in the lightbox - updates URL to deep link
+  // Handle opening an item in the lightbox
   const handleItemClick = (item: MediaItem, index: number) => {
-    const deepLinkUrl = `/${item.type}/${encodeURIComponent(item.key)}`
-    navigate(deepLinkUrl)
+    setSelectedIndex(index)
   }
 
-  // Handle closing the lightbox - navigate back to gallery or close lightbox
+  // Handle closing the lightbox
   const handleCloseLightbox = () => {
-    if (initialKey) {
-      // We're on a deep link route, navigate back to the appropriate gallery page
-      const galleryUrl = scope === 'public'
-        ? (filterBy ? `/${filterBy}s` : '/')
-        : (filterBy ? `/private/${filterBy}s` : '/private')
-      navigate(galleryUrl)
-    } else {
-      // We're already on a gallery route, just close the lightbox
-      setSelectedIndex(null)
-    }
+    setSelectedIndex(null)
+
+    // If we came from a deep link route (initialKey), navigate back to gallery
+    // Otherwise, just restore the gallery URL (Lightbox changed it to deep link)
+    const galleryUrl = scope === 'public'
+      ? (filterBy ? `/${filterBy}s` : '/')
+      : (filterBy ? `/private/${filterBy}s` : '/private')
+
+    // Use replace to avoid cluttering history
+    navigate(galleryUrl, { replace: true })
   }
 
   if (loading) {
