@@ -55,6 +55,9 @@
     "vitest": "^3.2.4",
     "wrangler": "^4.42.0"
   },
+  "optionalDependencies":  {  
+    "@rollup/rollup-linux-arm64-gnu": "^4.0.0"  
+  },
   "lint-staged": {
     "*.{js,ts,tsx}": [
       "eslint --fix"
