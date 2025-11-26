@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Play } from 'lucide-react'
 import Masonry from 'react-masonry-css'
 import type { MediaItem } from '@/types'
@@ -19,7 +18,6 @@ interface GalleryProps {
 }
 
 export function Gallery({ scope, filterBy, initialKey }: GalleryProps) {
-  const navigate = useNavigate()
   const [media, setMedia] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -124,14 +122,14 @@ export function Gallery({ scope, filterBy, initialKey }: GalleryProps) {
   const handleCloseLightbox = () => {
     setSelectedIndex(null)
 
-    // If we came from a deep link route (initialKey), navigate back to gallery
-    // Otherwise, just restore the gallery URL (Lightbox changed it to deep link)
+    // Restore gallery URL without triggering React Router navigation
+    // This prevents unnecessary re-renders of the Gallery component
     const galleryUrl = scope === 'public'
       ? (filterBy ? `/${filterBy}s` : '/')
       : (filterBy ? `/private/${filterBy}s` : '/private')
 
-    // Use replace to avoid cluttering history
-    navigate(galleryUrl, { replace: true })
+    // Use History API directly to avoid re-render
+    window.history.replaceState(null, '', galleryUrl)
   }
 
   if (loading) {

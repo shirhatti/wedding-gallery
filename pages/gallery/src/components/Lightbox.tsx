@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import {
   MediaPlayer,
@@ -34,19 +33,18 @@ interface LightboxProps {
 }
 
 export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
-  const navigate = useNavigate()
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [authToken, setAuthToken] = useState<string | null>(null)
   const [imageError, setImageError] = useState(false)
 
-  // Update URL to reflect current item in lightbox
+  // Update URL to reflect current item in lightbox without triggering React Router
   useEffect(() => {
     const currentItem = media[currentIndex]
     if (currentItem) {
       const deepLinkUrl = `/${currentItem.type}/${encodeURIComponent(currentItem.key)}`
-      navigate(deepLinkUrl, { replace: true })
+      window.history.replaceState(null, '', deepLinkUrl)
     }
-  }, [currentIndex, media, navigate])
+  }, [currentIndex, media])
 
   // Track mobile viewport state and update on resize/rotation
   const [isMobile, setIsMobile] = useState(() =>
