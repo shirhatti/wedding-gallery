@@ -53,39 +53,42 @@ export function Gallery({ scope, filterBy, initialKey }: GalleryProps) {
   }
 
   useEffect(() => {
-    loadMedia()
-  }, [])
+    async function loadMedia() {
+      setLoading(true)
+      setError(null)
 
-  async function loadMedia() {
-    try {
-      const url = scope === 'public'
-        ? `${API_BASE}/api/media?scope=public`
-        : `${API_BASE}/api/media`
+      try {
+        const url = scope === 'public'
+          ? `${API_BASE}/api/media?scope=public`
+          : `${API_BASE}/api/media`
 
-      const response = await fetch(url, {
-        credentials: 'include',
-      })
+        const response = await fetch(url, {
+          credentials: 'include',
+        })
 
-      if (!response.ok) {
-        if (response.status === 401 && scope === 'private') {
-          // Redirect to login for private routes
-          const returnTo = encodeURIComponent(
-            window.location.pathname + window.location.search
-          )
-          window.location.href = `/login?returnTo=${returnTo}`
-          return
+        if (!response.ok) {
+          if (response.status === 401 && scope === 'private') {
+            // Redirect to login for private routes
+            const returnTo = encodeURIComponent(
+              window.location.pathname + window.location.search
+            )
+            window.location.href = `/login?returnTo=${returnTo}`
+            return
+          }
+          throw new Error('Failed to load media')
         }
-        throw new Error('Failed to load media')
-      }
 
-      const data = await response.json()
-      setMedia(data.media || [])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load media')
-    } finally {
-      setLoading(false)
+        const data = await response.json()
+        setMedia(data.media || [])
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load media')
+      } finally {
+        setLoading(false)
+      }
     }
-  }
+
+    loadMedia()
+  }, [scope]) // Re-fetch when scope changes
 
   // Helper to get thumbnail URL - supports both pre-signed URLs and proxy mode
   // Note: Pre-signed URLs (item.urls) are only generated for 'medium' size thumbnails
