@@ -224,7 +224,10 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
         {isVideo ? (
           <MediaPlayer
             key={currentItem.key}
-            src={getVideoSource(currentItem)}
+            src={{
+              src: getVideoSource(currentItem),
+              type: 'application/x-mpegurl'
+            }}
             playsInline
             streamType="on-demand"
             className="max-h-[90vh] max-w-full"

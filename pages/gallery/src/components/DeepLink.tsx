@@ -27,7 +27,8 @@ export function DeepLink({ type }: DeepLinkProps) {
       const galleryUrl = type === 'image' ? '/images' : '/videos'
       navigate(galleryUrl, { replace: true })
     }
-  }, [key, type, navigate])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Show loading while redirecting
   return (
