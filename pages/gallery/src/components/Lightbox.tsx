@@ -130,6 +130,26 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
     setCurrentIndex((prev) => (prev + direction + media.length) % media.length)
   }
 
+  // Save and restore scroll position on mount/unmount
+  useEffect(() => {
+    // Save scroll position and prevent scrolling
+    const scrollY = window.scrollY
+    document.body.style.overflow = 'hidden'
+    document.body.style.position = 'fixed'
+    document.body.style.top = `-${scrollY}px`
+    document.body.style.width = '100%'
+
+    return () => {
+      // Restore scroll position
+      document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.top = ''
+      document.body.style.width = ''
+      window.scrollTo(0, scrollY)
+    }
+  }, [])
+
+  // Handle keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -144,11 +164,9 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
     if (!isMobile) {
       document.addEventListener('keydown', handleKeyDown)
     }
-    document.body.style.overflow = 'hidden'
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = ''
     }
   }, [currentIndex, isMobile])
 
