@@ -54,41 +54,42 @@ export function Gallery({ scope, filterBy }: GalleryProps) {
     [LAYOUT_BREAKPOINTS.MOBILE]: 2
   }
 
-  useEffect(() => {
-    async function loadMedia() {
-      setLoading(true)
-      setError(null)
+  // Load media function (defined outside useEffect so it can be reused)
+  const loadMedia = async () => {
+    setLoading(true)
+    setError(null)
 
-      try {
-        const url = scope === 'public'
-          ? `${API_BASE}/api/media?scope=public`
-          : `${API_BASE}/api/media`
+    try {
+      const url = scope === 'public'
+        ? `${API_BASE}/api/media?scope=public`
+        : `${API_BASE}/api/media`
 
-        const response = await fetch(url, {
-          credentials: 'include',
-        })
+      const response = await fetch(url, {
+        credentials: 'include',
+      })
 
-        if (!response.ok) {
-          if (response.status === 401 && scope === 'private') {
-            // Redirect to login for private routes
-            const returnTo = encodeURIComponent(
-              window.location.pathname + window.location.search
-            )
-            window.location.href = `/login?returnTo=${returnTo}`
-            return
-          }
-          throw new Error('Failed to load media')
+      if (!response.ok) {
+        if (response.status === 401 && scope === 'private') {
+          // Redirect to login for private routes
+          const returnTo = encodeURIComponent(
+            window.location.pathname + window.location.search
+          )
+          window.location.href = `/login?returnTo=${returnTo}`
+          return
         }
-
-        const data = await response.json()
-        setMedia(data.media || [])
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load media')
-      } finally {
-        setLoading(false)
+        throw new Error('Failed to load media')
       }
-    }
 
+      const data = await response.json()
+      setMedia(data.media || [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load media')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
     loadMedia()
   }, [scope]) // Re-fetch when scope changes
 
@@ -116,7 +117,7 @@ export function Gallery({ scope, filterBy }: GalleryProps) {
   }
 
   // Handle opening an item in the lightbox
-  const handleItemClick = (item: MediaItem, index: number) => {
+  const handleItemClick = (_item: MediaItem, index: number) => {
     setSelectedIndex(index)
   }
 
