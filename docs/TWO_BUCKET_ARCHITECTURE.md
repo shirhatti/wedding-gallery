@@ -5,7 +5,7 @@
 The wedding gallery uses a two-bucket architecture for public/private media separation:
 
 - **Public Bucket** (`wedding-photos-public`): Anonymous read access, serves public media
-- **Private Bucket** (`wedding-photos-private`): Requires authentication, serves private media
+- **Private Bucket** (`wedding-photos`): Requires authentication, serves private media
 
 ## Architecture Benefits
 
@@ -85,7 +85,7 @@ npx wrangler pages deploy dist
 | Route | Scope | Bucket | Auth Required |
 |-------|-------|--------|---------------|
 | `/`, `/images`, `/videos` | `public` | `wedding-photos-public` | No |
-| `/private`, `/private/images`, `/private/videos` | `private` | `wedding-photos-private` | Yes |
+| `/private`, `/private/images`, `/private/videos` | `private` | `wedding-photos` | Yes |
 
 ### API Flow
 

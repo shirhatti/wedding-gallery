@@ -6,8 +6,8 @@ compatibility_flags = ["nodejs_compat"]
 # R2 bucket binding - always uploads to private bucket
 [[r2_buckets]]
 binding = "PHOTOS_BUCKET"
-bucket_name = "wedding-photos-private"
-preview_bucket_name = "wedding-photos-private"
+bucket_name = "wedding-photos"
+preview_bucket_name = "wedding-photos"
 
 # D1 database binding
 [[d1_databases]]
