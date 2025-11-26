@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import {
   MediaPlayer,
@@ -36,6 +36,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [authToken, setAuthToken] = useState<string | null>(null)
   const [imageError, setImageError] = useState(false)
+  const savedScrollY = useRef(0)
 
   // Update URL to include lightbox query param for sharing
   useEffect(() => {
@@ -132,10 +133,10 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
   // Save and restore scroll position on mount/unmount
   useEffect(() => {
     // Save scroll position and prevent scrolling
-    const scrollY = window.scrollY
+    savedScrollY.current = window.scrollY
     document.body.style.overflow = 'hidden'
     document.body.style.position = 'fixed'
-    document.body.style.top = `-${scrollY}px`
+    document.body.style.top = `-${savedScrollY.current}px`
     document.body.style.width = '100%'
 
     return () => {
@@ -144,7 +145,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
       document.body.style.position = ''
       document.body.style.top = ''
       document.body.style.width = ''
-      window.scrollTo(0, scrollY)
+      window.scrollTo(0, savedScrollY.current)
     }
   }, [])
 

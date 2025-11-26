@@ -14,10 +14,9 @@ const API_BASE = import.meta.env.VITE_API_BASE || ''
 interface GalleryProps {
   scope: 'public' | 'private'
   filterBy?: 'image' | 'video'
-  initialKey?: string // Key of media item to open in lightbox on load
 }
 
-export function Gallery({ scope, filterBy, initialKey }: GalleryProps) {
+export function Gallery({ scope, filterBy }: GalleryProps) {
   const [media, setMedia] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -29,28 +28,18 @@ export function Gallery({ scope, filterBy, initialKey }: GalleryProps) {
     return media.filter(item => item.type === filterBy)
   }, [media, filterBy])
 
-  // Open lightbox for deep linked item when media loads
-  useEffect(() => {
-    if (initialKey && filteredMedia.length > 0 && selectedIndex === null) {
-      const index = filteredMedia.findIndex(item => item.key === initialKey)
-      if (index !== -1) {
-        setSelectedIndex(index)
-      }
-    }
-  }, [initialKey, filteredMedia, selectedIndex])
-
   // Open lightbox from query param (for shareable URLs)
   useEffect(() => {
     const url = new URL(window.location.href)
     const lightboxKey = url.searchParams.get('lightbox')
 
-    if (lightboxKey && filteredMedia.length > 0 && selectedIndex === null && !initialKey) {
+    if (lightboxKey && filteredMedia.length > 0 && selectedIndex === null) {
       const index = filteredMedia.findIndex(item => item.key === lightboxKey)
       if (index !== -1) {
         setSelectedIndex(index)
       }
     }
-  }, [filteredMedia, selectedIndex, initialKey])
+  }, [filteredMedia, selectedIndex])
 
   // Reset selected index when filter changes to prevent out-of-bounds errors
   useEffect(() => {

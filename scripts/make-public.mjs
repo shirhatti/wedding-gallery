@@ -16,7 +16,15 @@
  */
 
 import { execSync } from 'child_process';
-import { writeFileSync } from 'fs';
+import { PrismaClient } from '@prisma/client';
+import { PrismaD1 } from '@prisma/adapter-d1';
+
+// Constants
+const R2_BUCKET = 'wedding-photos';
+const D1_DATABASE = 'wedding-photos-metadata';
+
+// Input validation regex - matches timestamp-filename pattern
+const VALID_KEY_PATTERN = /^\d+-[\w\-\.]+$/;
 
 const key = process.argv[2];
 const keepPrivate = process.argv.includes('--keep-private');
@@ -30,13 +38,19 @@ if (!key) {
   process.exit(1);
 }
 
+// Validate key format to prevent injection
+if (!VALID_KEY_PATTERN.test(key)) {
+  console.error('❌ Error: Invalid key format. Expected format: <timestamp>-<filename>');
+  console.error(`   Got: ${key}`);
+  process.exit(1);
+}
+
 if (key.startsWith('public/')) {
   console.error('❌ Error: This item is already public');
   process.exit(1);
 }
 
 const publicKey = `public/${key}`;
-const escape = (val) => val ? `'${String(val).replace(/'/g, "''")}'` : 'NULL';
 
 console.log(`Promoting to public: ${key}`);
 console.log(`New key will be: ${publicKey}\n`);
@@ -44,10 +58,12 @@ console.log(`New key will be: ${publicKey}\n`);
 try {
   // 1. Check if media exists in D1
   console.log('1. Checking if media exists in database...');
-  const checkSql = `SELECT key, type FROM media WHERE key = ${escape(key)};`;
-  writeFileSync('/tmp/check.sql', checkSql);
+  // Safe to use key directly since it's validated against VALID_KEY_PATTERN
+  const checkSql = `SELECT key, type FROM media WHERE key = '${key}';`;
+  const checkSqlFile = '/tmp/check.sql';
+  execSync(`cat > ${checkSqlFile} << 'EOF'\n${checkSql}\nEOF`, { stdio: 'pipe' });
 
-  const result = execSync('npx wrangler d1 execute wedding-photos-metadata --file=/tmp/check.sql --remote --json', {
+  const result = execSync(`npx wrangler d1 execute ${D1_DATABASE} --file=${checkSqlFile} --remote --json`, {
     cwd: 'workers/viewer',
     encoding: 'utf-8'
   });
@@ -65,11 +81,11 @@ try {
 
   // 2. Copy main file
   console.log('\n2. Copying main file to public/ path...');
-  execSync(`npx wrangler r2 object get wedding-photos/${key} --file=/tmp/main-file --remote`, {
+  execSync(`npx wrangler r2 object get ${R2_BUCKET}/${key} --file=/tmp/main-file --remote`, {
     cwd: 'workers/viewer',
     stdio: 'pipe'
   });
-  execSync(`npx wrangler r2 object put wedding-photos/${publicKey} --file=/tmp/main-file --remote`, {
+  execSync(`npx wrangler r2 object put ${R2_BUCKET}/${publicKey} --file=/tmp/main-file --remote`, {
     cwd: 'workers/viewer',
     stdio: 'pipe'
   });
@@ -85,11 +101,11 @@ try {
       const privateThumbnail = `thumbnails/${size}/${baseFilename}_${size}.jpg`;
       const publicThumbnail = `thumbnails/public/${baseFilename}_${size}.jpg`;
 
-      execSync(`npx wrangler r2 object get wedding-photos/${privateThumbnail} --file=/tmp/thumbnail --remote`, {
+      execSync(`npx wrangler r2 object get ${R2_BUCKET}/${privateThumbnail} --file=/tmp/thumbnail --remote`, {
         cwd: 'workers/viewer',
         stdio: 'pipe'
       });
-      execSync(`npx wrangler r2 object put wedding-photos/${publicThumbnail} --file=/tmp/thumbnail --remote`, {
+      execSync(`npx wrangler r2 object put ${R2_BUCKET}/${publicThumbnail} --file=/tmp/thumbnail --remote`, {
         cwd: 'workers/viewer',
         stdio: 'pipe'
       });
@@ -108,7 +124,7 @@ try {
     const publicHlsPrefix = `hls/public/${key}/`;
 
     try {
-      const listResult = execSync(`npx wrangler r2 object list wedding-photos --prefix="${hlsPrefix}" --remote`, {
+      const listResult = execSync(`npx wrangler r2 object list ${R2_BUCKET} --prefix="${hlsPrefix}" --remote`, {
         cwd: 'workers/viewer',
         encoding: 'utf-8'
       });
@@ -136,11 +152,11 @@ try {
           const relativePath = hlsFile.substring(hlsPrefix.length);
           const publicHlsFile = `${publicHlsPrefix}${relativePath}`;
 
-          execSync(`npx wrangler r2 object get wedding-photos/${hlsFile} --file=/tmp/hls-file --remote`, {
+          execSync(`npx wrangler r2 object get ${R2_BUCKET}/${hlsFile} --file=/tmp/hls-file --remote`, {
             cwd: 'workers/viewer',
             stdio: 'pipe'
           });
-          execSync(`npx wrangler r2 object put wedding-photos/${publicHlsFile} --file=/tmp/hls-file --remote`, {
+          execSync(`npx wrangler r2 object put ${R2_BUCKET}/${publicHlsFile} --file=/tmp/hls-file --remote`, {
             cwd: 'workers/viewer',
             stdio: 'pipe'
           });
@@ -154,15 +170,12 @@ try {
 
   // 5. Update D1 database
   console.log('\n5. Updating database...');
-  const updateSql = `
-    UPDATE media
-    SET key = ${escape(publicKey)},
-        is_public = 1
-    WHERE key = ${escape(key)};
-  `;
+  // Safe to use key and publicKey directly since they're validated
+  const updateSql = `UPDATE media SET key = '${publicKey}', is_public = 1 WHERE key = '${key}';`;
+  const updateSqlFile = '/tmp/update.sql';
+  execSync(`cat > ${updateSqlFile} << 'EOF'\n${updateSql}\nEOF`, { stdio: 'pipe' });
 
-  writeFileSync('/tmp/update.sql', updateSql);
-  execSync('npx wrangler d1 execute wedding-photos-metadata --file=/tmp/update.sql --remote', {
+  execSync(`npx wrangler d1 execute ${D1_DATABASE} --file=${updateSqlFile} --remote`, {
     cwd: 'workers/viewer',
     stdio: 'pipe'
   });
@@ -174,7 +187,7 @@ try {
 
     // Delete main file
     try {
-      execSync(`npx wrangler r2 object delete wedding-photos/${key} --remote`, {
+      execSync(`npx wrangler r2 object delete ${R2_BUCKET}/${key} --remote`, {
         cwd: 'workers/viewer',
         stdio: 'pipe'
       });
@@ -187,7 +200,7 @@ try {
     for (const size of thumbnailSizes) {
       try {
         const privateThumbnail = `thumbnails/${size}/${baseFilename}_${size}.jpg`;
-        execSync(`npx wrangler r2 object delete wedding-photos/${privateThumbnail} --remote`, {
+        execSync(`npx wrangler r2 object delete ${R2_BUCKET}/${privateThumbnail} --remote`, {
           cwd: 'workers/viewer',
           stdio: 'pipe'
         });
@@ -201,7 +214,7 @@ try {
     if (isVideo) {
       try {
         const hlsPrefix = `hls/${key}/`;
-        const listResult = execSync(`npx wrangler r2 object list wedding-photos --prefix="${hlsPrefix}" --remote`, {
+        const listResult = execSync(`npx wrangler r2 object list ${R2_BUCKET} --prefix="${hlsPrefix}" --remote`, {
           cwd: 'workers/viewer',
           encoding: 'utf-8'
         });
@@ -210,7 +223,7 @@ try {
         for (const line of lines) {
           const match = line.match(/│\s+([^\s│]+)\s+│/);
           if (match && match[1].startsWith(hlsPrefix)) {
-            execSync(`npx wrangler r2 object delete wedding-photos/${match[1]} --remote`, {
+            execSync(`npx wrangler r2 object delete ${R2_BUCKET}/${match[1]} --remote`, {
               cwd: 'workers/viewer',
               stdio: 'pipe'
             });

@@ -27,6 +27,9 @@ export function DeepLink({ type }: DeepLinkProps) {
       const galleryUrl = type === 'image' ? '/images' : '/videos'
       navigate(galleryUrl, { replace: true })
     }
+    // Empty deps: This component's sole purpose is to redirect once on mount.
+    // After redirect, component unmounts (route changes), so re-running is unnecessary.
+    // key, type, and navigate are captured from props/hooks at mount time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
