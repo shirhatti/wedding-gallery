@@ -8,8 +8,7 @@ import { Navigation } from './Navigation'
 import { GalleryHeader } from './GalleryHeader'
 import { cn } from '@/lib/utils'
 import { LAYOUT_BREAKPOINTS, THUMBNAIL_SIZES } from '@/lib/constants'
-
-const API_BASE = import.meta.env.VITE_API_BASE || ''
+import { fetchMediaList, getThumbnailUrl, getThumbnailSrcset } from '@/lib/mediaUrlResolver'
 
 interface GalleryProps {
   scope: 'public' | 'private'
@@ -54,34 +53,14 @@ export function Gallery({ scope, filterBy }: GalleryProps) {
     [LAYOUT_BREAKPOINTS.MOBILE]: 2
   }
 
-  // Load media function (defined outside useEffect so it can be reused)
+  // Load media using the service layer
   const loadMedia = async () => {
     setLoading(true)
     setError(null)
 
     try {
-      const url = scope === 'public'
-        ? `${API_BASE}/api/media?scope=public`
-        : `${API_BASE}/api/media`
-
-      const response = await fetch(url, {
-        credentials: 'include',
-      })
-
-      if (!response.ok) {
-        if (response.status === 401 && scope === 'private') {
-          // Redirect to login for private routes
-          const returnTo = encodeURIComponent(
-            window.location.pathname + window.location.search
-          )
-          window.location.href = `/login?returnTo=${returnTo}`
-          return
-        }
-        throw new Error('Failed to load media')
-      }
-
-      const data = await response.json()
-      setMedia(data.media || [])
+      const mediaList = await fetchMediaList(scope)
+      setMedia(mediaList)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load media')
     } finally {
@@ -92,29 +71,6 @@ export function Gallery({ scope, filterBy }: GalleryProps) {
   useEffect(() => {
     loadMedia()
   }, [scope]) // Re-fetch when scope changes
-
-  // Helper to get thumbnail URL - supports both pre-signed URLs and proxy mode
-  // Note: Pre-signed URLs (item.urls) are only generated for 'medium' size thumbnails
-  // to minimize backend processing. For 'small' and 'large' sizes, we always use
-  // the proxy API endpoint which can serve all three sizes on-demand.
-  const getThumbnailUrl = (item: MediaItem, size: 'small' | 'medium' | 'large' = 'medium'): string => {
-    if (size === 'medium' && item.urls?.thumbnailMedium) {
-      // Use pre-signed URL when available (reduces worker load)
-      return item.urls.thumbnailMedium
-    }
-    // Fall back to proxy mode for all other cases (local dev or non-medium sizes)
-    // Important: URL-encode the key to handle filenames with spaces and special characters
-    return `${API_BASE}/api/thumbnail/${encodeURIComponent(item.key)}?size=${size}`
-  }
-
-  // Generate srcset for responsive images
-  const getThumbnailSrcset = (item: MediaItem): string => {
-    return [
-      `${getThumbnailUrl(item, 'small')} 150w`,
-      `${getThumbnailUrl(item, 'medium')} 400w`,
-      `${getThumbnailUrl(item, 'large')} 800w`,
-    ].join(', ')
-  }
 
   // Handle opening an item in the lightbox
   const handleItemClick = (_item: MediaItem, index: number) => {
@@ -203,8 +159,8 @@ export function Gallery({ scope, filterBy }: GalleryProps) {
                 {/* Thumbnail with natural aspect ratio */}
                 <div className="relative w-full">
                   <LazyImage
-                    src={getThumbnailUrl(item, 'medium')}
-                    srcset={getThumbnailSrcset(item)}
+                    src={getThumbnailUrl(item, scope, 'medium')}
+                    srcset={getThumbnailSrcset(item, scope)}
                     sizes={THUMBNAIL_SIZES}
                     alt={item.name}
                     aspectRatio={item.width && item.height ? item.width / item.height : undefined}
@@ -238,6 +194,7 @@ export function Gallery({ scope, filterBy }: GalleryProps) {
           media={filteredMedia}
           initialIndex={selectedIndex}
           onClose={handleCloseLightbox}
+          scope={scope}
         />
       )}
     </>

@@ -3,10 +3,10 @@
  */
 
 export interface VideoStreamingEnv {
-  R2_BUCKET: R2Bucket;
+  R2_BUCKET: R2Bucket;  // Private bucket only
   VIDEO_CACHE: KVNamespace;
   DB: D1Database;
-  // R2 signing credentials
+  // R2 signing credentials (for private bucket pre-signed URLs)
   R2_ACCESS_KEY_ID?: string;
   R2_SECRET_ACCESS_KEY?: string;
   R2_REGION?: string;

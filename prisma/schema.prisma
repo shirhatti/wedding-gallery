@@ -7,6 +7,7 @@ generator client {
 
 datasource db {
   provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model Media {
@@ -52,9 +53,6 @@ model Media {
 
   // Full EXIF metadata (JSON blob)
   metadata String?
-
-  // Public access flag
-  isPublic Boolean @default(false) @map("is_public")
 
   // Timestamps (Note: Application code explicitly sets these)
   processedAt DateTime? @map("processed_at")

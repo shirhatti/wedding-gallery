@@ -4,7 +4,7 @@
   "private": true,
   "main": "src/index.ts",
   "scripts": {
-    "dev": "wrangler dev --remote --var DISABLE_AUTH:true",
+    "dev": "wrangler dev --remote --var DISABLE_AUTH:true --var PUBLIC_BUCKET_URL:https://media.jessandsourabh.com",
     "deploy": "wrangler deploy"
   },
   "dependencies": {

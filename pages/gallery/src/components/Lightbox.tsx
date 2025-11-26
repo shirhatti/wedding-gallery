@@ -12,6 +12,14 @@ import Hls from 'hls.js'
 import { MediaItem } from '@/types'
 import { Button } from '@/components/ui/button'
 import { MOBILE_BREAKPOINT, LIGHTBOX_SIZES } from '@/lib/constants'
+import {
+  type Scope,
+  getAuthTokenUrl,
+  getHLSPlaylistUrl,
+  getOriginalUrl,
+  getThumbnailUrl,
+  getLightboxSrcset
+} from '@/lib/mediaUrlResolver'
 
 // Extended HLS class to enable AirPlay support
 // hls.js sets disableRemotePlayback=true by default, blocking AirPlay
@@ -24,15 +32,14 @@ class ExtendedHls extends Hls {
   }
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE || ''
-
 interface LightboxProps {
   media: MediaItem[]
   initialIndex: number
   onClose: () => void
+  scope: Scope
 }
 
-export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
+export function Lightbox({ media, initialIndex, onClose, scope }: LightboxProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [authToken, setAuthToken] = useState<string | null>(null)
   const [imageError, setImageError] = useState(false)
@@ -73,7 +80,7 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
   useEffect(() => {
     async function fetchAuthToken() {
       try {
-        const response = await fetch(`${API_BASE}/api/auth-token`, {
+        const response = await fetch(getAuthTokenUrl(), {
           credentials: 'include'
         })
         if (response.ok) {
@@ -86,45 +93,6 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
     }
     fetchAuthToken()
   }, [])
-
-  // Helper to get original URL - supports both pre-signed URLs and proxy mode
-  const getOriginalUrl = (item: MediaItem): string => {
-    if (item.urls?.original) {
-      // Pre-signed URL mode (when R2 credentials are configured)
-      return item.urls.original
-    }
-    // Fallback to proxy mode (local dev without R2 credentials)
-    return `${API_BASE}/api/file/${encodeURIComponent(item.key)}`
-  }
-
-  // Helper to get thumbnail URL - supports both pre-signed URLs and proxy mode
-  // Uses same logic as Gallery component for consistency
-  const getThumbnailUrl = (item: MediaItem, size: 'small' | 'medium' | 'large' = 'medium'): string => {
-    if (size === 'medium' && item.urls?.thumbnailMedium) {
-      // Use pre-signed URL when available (reduces worker load)
-      return item.urls.thumbnailMedium
-    }
-    // Fall back to proxy mode for all other cases (local dev or non-medium sizes)
-    // Important: URL-encode the key to handle filenames with spaces and special characters
-    return `${API_BASE}/api/thumbnail/${encodeURIComponent(item.key)}?size=${size}`
-  }
-
-  // Generate srcset for lightbox - use large thumbnail for smaller viewports, original for larger
-  const getLightboxSrcset = (item: MediaItem): string => {
-    const sources = [`${getThumbnailUrl(item, 'large')} 800w`]
-    // Use actual image width if available and valid
-    if (item.width && item.width > 0) {
-      // Round to integer since srcset width descriptors must be positive integers
-      sources.push(`${getOriginalUrl(item)} ${Math.round(item.width)}w`)
-    } else {
-      // Fallback for missing/invalid width metadata
-      // Use 3000w to represent typical modern camera output (2000-6000px range)
-      // This ensures browser selects original for desktop viewing (90vw ≈ 1700px < 3000w)
-      // while mobile still gets 800w thumbnail via explicit 800px sizes cap
-      sources.push(`${getOriginalUrl(item)} 3000w`)
-    }
-    return sources.join(', ')
-  }
 
   const changeItem = (direction: number) => {
     setCurrentIndex((prev) => (prev + direction + media.length) % media.length)
@@ -170,15 +138,9 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
     }
   }, [currentIndex, isMobile])
 
-  // Generate video source - prefer HLS if available, fallback to direct MP4
+  // Generate video source - prefer HLS if available
   const getVideoSource = (item: MediaItem): string => {
-    // Append auth token to HLS URL for iOS Safari native HLS playback
-    // iOS Safari doesn't send cookies with video segment requests
-    let hlsUrl = `${API_BASE}/api/hls/playlist?key=${encodeURIComponent(item.key)}`
-    if (authToken) {
-      hlsUrl += `&token=${encodeURIComponent(authToken)}`
-    }
-    return hlsUrl
+    return getHLSPlaylistUrl(item, scope, authToken)
   }
 
   return (
@@ -262,8 +224,8 @@ export function Lightbox({ media, initialIndex, onClose }: LightboxProps) {
           </div>
         ) : (
           <img
-            src={getOriginalUrl(currentItem)}
-            srcSet={getLightboxSrcset(currentItem)}
+            src={getOriginalUrl(currentItem, scope)}
+            srcSet={getLightboxSrcset(currentItem, scope)}
             sizes={LIGHTBOX_SIZES}
             alt={currentItem.name}
             onError={() => {

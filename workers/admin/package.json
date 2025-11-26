@@ -1,0 +1,14 @@
+{
+  "name": "@wedding-gallery/admin",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev --remote",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@prisma/client": "*",
+    "@prisma/adapter-d1": "*"
+  }
+}
