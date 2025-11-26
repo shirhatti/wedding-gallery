@@ -48,8 +48,12 @@ export default {
           return handleListMedia(env, false); // false = not authenticated, return public only
         }
 
-        // Private scope (default): require authentication
-        if (env.GALLERY_PASSWORD && env.DISABLE_AUTH !== "true") {
+        // Private scope (default): require authentication unless explicitly disabled
+        if (env.DISABLE_AUTH !== "true") {
+          if (!env.GALLERY_PASSWORD || !env.AUTH_SECRET) {
+            throw new Error("Auth is enabled but GALLERY_PASSWORD or AUTH_SECRET is not configured");
+          }
+
           const authValue = getAuthCookie(request);
 
           // Extract audience
@@ -67,9 +71,9 @@ export default {
 
           const valid = await validateAuthToken(
             {
-              secret: env.AUTH_SECRET!,
+              secret: env.AUTH_SECRET,
               cacheVersion: env.CACHE_VERSION,
-              disableAuth: env.DISABLE_AUTH === "true"
+              disableAuth: false
             },
             audience,
             authValue
@@ -96,8 +100,12 @@ export default {
         );
         isPublicResource = key.startsWith("public/");
 
-        // Require auth for private resources (unless auth is disabled for dev)
-        if (!isPublicResource && env.GALLERY_PASSWORD && env.DISABLE_AUTH !== "true") {
+        // Require auth for private resources unless explicitly disabled
+        if (!isPublicResource && env.DISABLE_AUTH !== "true") {
+          if (!env.GALLERY_PASSWORD || !env.AUTH_SECRET) {
+            throw new Error("Auth is enabled but GALLERY_PASSWORD or AUTH_SECRET is not configured");
+          }
+
           const authValue = getAuthCookie(request);
 
           // Extract audience
@@ -115,9 +123,9 @@ export default {
 
           const valid = await validateAuthToken(
             {
-              secret: env.AUTH_SECRET!,
+              secret: env.AUTH_SECRET,
               cacheVersion: env.CACHE_VERSION,
-              disableAuth: env.DISABLE_AUTH === "true"
+              disableAuth: false
             },
             audience,
             authValue
