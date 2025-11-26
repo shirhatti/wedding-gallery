@@ -148,7 +148,7 @@ export function Gallery({ scope, filterBy, initialKey }: GalleryProps) {
   if (noMediaMessage) {
     return (
       <div className="min-h-screen bg-zinc-900">
-        <GalleryHeader />
+        <GalleryHeader scope={scope} />
         <div className="flex items-center justify-center pt-20">
           <p className="text-xl text-zinc-400">{noMediaMessage}</p>
         </div>
