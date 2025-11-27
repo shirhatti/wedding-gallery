@@ -1,7 +1,11 @@
 {
-  "extends": "./tsconfig.base.json",
-  "compilerOptions": {
-    "module": "ES2020",
-    "types": ["@cloudflare/workers-types"]
-  }
+  "files": [],
+  "references": [
+    { "path": "./workers/viewer" },
+    { "path": "./workers/video-streaming" },
+    { "path": "./workers/album" },
+    { "path": "./packages/auth" },
+    { "path": "./packages/shared-video-lib" },
+    { "path": "./pages/gallery" }
+  ]
 }
