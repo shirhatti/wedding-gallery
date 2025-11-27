@@ -166,8 +166,8 @@ export default {
         filename: string;
         type: string;
         size: number | null;
-        uploadedAt: string | null;
-        dateTaken: string | null;
+        uploadedAt: Date | null;
+        dateTaken: Date | null;
         cameraMake: string | null;
         cameraModel: string | null;
         width: number | null;
@@ -205,8 +205,8 @@ export default {
           name: row.filename,
           size: row.size ?? 0,
           type: row.type,
-          uploadedAt: row.uploadedAt ?? "",
-          dateTaken: row.dateTaken,
+          uploadedAt: row.uploadedAt?.toISOString() ?? "",
+          dateTaken: row.dateTaken?.toISOString() ?? null,
           cameraMake: row.cameraMake,
           cameraModel: row.cameraModel,
         };

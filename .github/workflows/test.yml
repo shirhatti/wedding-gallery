@@ -25,5 +25,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: TypeScript check - all projects
+        run: npx tsc --build
+
       - name: Run tests
         run: npm test -- --run
