@@ -23,6 +23,9 @@ Thumbs.db
 # Build outputs
 dist/
 .cache/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
 
 # Local database files
 *.db
