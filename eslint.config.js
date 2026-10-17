@@ -4,7 +4,7 @@ import tseslint from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
 
 export default [
-  { ignores: [".wrangler/tmp/**"] },
+  { ignores: [".wrangler/tmp/**", "**/*.d.ts"] },
   {
     files: [
       "workers/*/src/**/*.{ts,tsx}"
